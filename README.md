@@ -5,7 +5,7 @@ Ensures that a new or existing Mac has necessary development software.
 Run it, replacing quoted values with your own:
 
 ```bash
-curl -sLO https://github.com/les-okta/mac/raw/master/strap.sh
+curl -sLO https://raw.githubusercontent.com/les-okta/mac/master/strap.sh
 STRAP_GIT_NAME='Firstname Lastname'
 STRAP_GIT_EMAIL='you@okta.com'
 STRAP_GITHUB_USER='you-okta'
