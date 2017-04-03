@@ -76,7 +76,7 @@ STRAP_GIT_NAME=
 STRAP_GIT_EMAIL=
 STRAP_GITHUB_USER=
 STRAP_GITHUB_TOKEN=
-STRAP_ISSUES_URL="https://github.com/mikemcquaid/strap/issues/new"
+STRAP_ISSUES_URL="https://github.com/les-okta/mac/issues/new"
 
 STRAP_FULL_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 
@@ -321,16 +321,6 @@ else
   logk
 fi
 
-logn "Checking stormpath-cli:"
-if brew list | grep stormpath-cli >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing stormpath cli..."
-  brew install stormpath-cli
-  logk
-fi
-
 logn "Checking mysql:"
 if brew list | grep mysql >/dev/null 2>&1; then
   logk
@@ -352,21 +342,29 @@ else
 fi
 
 logn "Checking liquidprompt:"
-if grep -q liquidprompt "$HOME/.bash_profile"; then
+if brew list | grep liquidprompt >/dev/null 2>&1; then
   logk
 else
   echo
   log "Installing liquidprompt..."
-  mkdir -p ~/projects
-  cd ~/projects
-  git clone https://github.com/nojhan/liquidprompt.git
-  cd ~
-  echo '' >> ~/.bash_profile
-  echo '# LiquidPrompt' >> ~/.bash_profile
-  echo '# Only load LiquidPrompt in interactive shells, not from a script or from scp' >> ~/.bash_profile
-  echo '[[ $- = *i* ]] && source ~/projects/liquidprompt/liquidprompt' >> ~/.bash_profile
-  logk
+  brew install liquidprompt
 fi
+
+#if grep -q liquidprompt "$HOME/.bash_profile"; then
+#  logk
+#else
+#  echo
+#  log "Installing liquidprompt..."
+#  mkdir -p ~/projects
+#  cd ~/projects
+#  git clone https://github.com/nojhan/liquidprompt.git
+#  cd ~
+#  echo '' >> ~/.bash_profile
+#  echo '# LiquidPrompt' >> ~/.bash_profile
+# echo '# Only load LiquidPrompt in interactive shells, not from a script or from scp' >> ~/.bash_profile
+#  echo '[[ $- = *i* ]] && source ~/projects/liquidprompt/liquidprompt' >> ~/.bash_profile
+#  logk
+#fi
 
 logn "Checking iterm2:"
 if [ -d "/Applications/iTerm.app" ] || brew cask list | grep iterm2 >/dev/null 2>&1; then
@@ -378,15 +376,15 @@ else
   logk
 fi
 
-logn "Checking google-chrome:"
-if [ -d "/Applications/Google Chrome.app" ] || brew cask list | grep google-chrome >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing google-chrome..."
-  brew cask install google-chrome
-  logk
-fi
+#logn "Checking google-chrome:"
+#if [ -d "/Applications/Google Chrome.app" ] || brew cask list | grep google-chrome >/dev/null 2>&1; then
+#  logk
+#else
+#  echo
+#  log "Installing google-chrome..."
+#  brew cask install google-chrome
+#  logk
+#fi
 
 logn "Checking java:"
 if brew cask list | grep java >/dev/null 2>&1; then
@@ -484,15 +482,15 @@ else
   logk
 fi
 
-logn "Checking docker:"
-if [ -d "/Applications/Docker.app" ] || brew cask list | grep docker >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing docker..."
-  brew cask install docker
-  logk
-fi
+#logn "Checking docker:"
+#if [ -d "/Applications/Docker.app" ] || brew cask list | grep docker >/dev/null 2>&1; then
+#  logk
+#else
+#  echo
+#  log "Installing docker..."
+#  brew cask install docker
+#  logk
+#fi
 
 logn "Checking intellij-idea:"
 if [ -d "/Applications/IntelliJ IDEA.app" ] || brew cask list | grep intellij-idea >/dev/null 2>&1; then
@@ -502,13 +500,13 @@ else
   log "Installing intellij-idea..."
   brew cask install intellij-idea
   logk
-  echo
-  log "Installing GMavenPlus plugin for intellij-idea..."
-  INTELLIJ_VERSION=`brew cask info intellij-idea | head -n1 | awk 'BEGIN { FS = "[:. ]" }; { print $3"."$4 }'`
-  curl -s \
-     https://raw.githubusercontent.com/mycila/gmavenplus-intellij-plugin/master/gmavenplus-intellij-plugin.jar > \
-     ~/Library/Application\ Support/IntelliJIdea$INTELLIJ_VERSION/gmavenplus-intellij-plugin.jar
-  logk
+  #echo
+  #log "Installing GMavenPlus plugin for intellij-idea..."
+  #INTELLIJ_VERSION=`brew cask info intellij-idea | head -n1 | awk 'BEGIN { FS = "[:. ]" }; { print $3"."$4 }'`
+  #curl -s \
+  #   https://raw.githubusercontent.com/mycila/gmavenplus-intellij-plugin/master/gmavenplus-intellij-plugin.jar > \
+  #   ~/Library/Application\ Support/IntelliJIdea$INTELLIJ_VERSION/gmavenplus-intellij-plugin.jar
+  #logk
 fi
 
 STRAP_SUCCESS="1"
