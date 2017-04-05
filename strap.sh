@@ -411,7 +411,7 @@ else
   sudo mv local_policy.jar local_policy.jar.orig
   sudo mv US_export_policy.jar US_export_policy.jar.orig
   sudo curl -sLO 'http://download.oracle.com/otn-pub/java/jce/8/jce_policy-8.zip' -H 'Cookie: oraclelicense=accept-securebackup-cookie'
-  sudo unzip jce_policy-8.zip
+  sudo unzip -q jce_policy-8.zip
   sudo mv UnlimitedJCEPolicyJDK8/US_export_policy.jar .
   sudo mv UnlimitedJCEPolicyJDK8/local_policy.jar .
   sudo chown root:wheel US_export_policy.jar
