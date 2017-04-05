@@ -348,23 +348,15 @@ else
   echo
   log "Installing liquidprompt..."
   brew install liquidprompt
+  
+  if ! grep -q liquidprompt "$HOME/.bash_profile"; then
+    echo '' >> ~/.bash_profile;
+    echo '# liquidprompt' >> ~/.bash_profile;
+    echo 'if [ -f $(brew --prefix)/share/liquidprompt ]; then' >> ~/.bash_profile;
+    echo '  . $(brew --prefix)/share/liquidprompt' >> ~/.bash_profile;
+    echo 'fi' >> ~/.bash_profile;
+  fi
 fi
-
-#if grep -q liquidprompt "$HOME/.bash_profile"; then
-#  logk
-#else
-#  echo
-#  log "Installing liquidprompt..."
-#  mkdir -p ~/projects
-#  cd ~/projects
-#  git clone https://github.com/nojhan/liquidprompt.git
-#  cd ~
-#  echo '' >> ~/.bash_profile
-#  echo '# LiquidPrompt' >> ~/.bash_profile
-# echo '# Only load LiquidPrompt in interactive shells, not from a script or from scp' >> ~/.bash_profile
-#  echo '[[ $- = *i* ]] && source ~/projects/liquidprompt/liquidprompt' >> ~/.bash_profile
-#  logk
-#fi
 
 logn "Checking iterm2:"
 if [ -d "/Applications/iTerm.app" ] || brew cask list | grep iterm2 >/dev/null 2>&1; then
@@ -376,6 +368,9 @@ else
   logk
 fi
 
+# Chrome has been a battery and memory hog lately and Safari has had
+# much better for performance.  Skipping Chrome as a result for now:
+#
 #logn "Checking google-chrome:"
 #if [ -d "/Applications/Google Chrome.app" ] || brew cask list | grep google-chrome >/dev/null 2>&1; then
 #  logk
@@ -396,19 +391,11 @@ else
   logk
 fi
 
-logn "Checking JAVA_HOME:"
-if grep -q JAVA_HOME "$HOME/.bash_profile"; then
-  logk
-else
-  echo
-  log "Setting JAVA_HOME..."
-  echo '' >> ~/.bash_profile
-  echo '# JAVA_HOME' >> ~/.bash_profile
-  echo 'export JAVA_HOME="$(/usr/libexec/java_home)"' >> ~/.bash_profile
-  echo 'export PATH="$JAVA_HOME/bin:$PATH"' >> ~/.bash_profile
-  logk
-fi
-
+# Don't set JAVA_HOME or modify .bash_profile - jenv with the
+# export plugin (enabled) below will set JAVA_HOME as necessary
+#
+# We just set it here because we need to reference the installation
+# for the JCE install next:
 [ -z "$JAVA_HOME" ] && JAVA_HOME="$(/usr/libexec/java_home)"
 [ -z "$JAVA_HOME" ] && abort "JAVA_HOME cannot be determined."
 
@@ -446,7 +433,7 @@ else
 
   if ! grep -q jenv "$HOME/.bash_profile"; then
     echo '' >> ~/.bash_profile;
-    echo '# jenv' >> ~/.bash_profile;
+    echo '# jenv (will also set JAVA_HOME env var due to jenv export plugin)' >> ~/.bash_profile;
     echo 'export PATH="$HOME/.jenv/bin:$PATH"' >> ~/.bash_profile;
     echo 'if command -v jenv >/dev/null; then eval "$(jenv init -)"; fi;' >> ~/.bash_profile;
   fi
