@@ -356,6 +356,7 @@ else
     echo '  . $(brew --prefix)/share/liquidprompt' >> ~/.bash_profile;
     echo 'fi' >> ~/.bash_profile;
   fi
+  logk
 fi
 
 logn "Checking iterm2:"
