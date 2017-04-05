@@ -224,7 +224,7 @@ else
 fi
 
 logn "Checking Homebrew Cask:"
-if brew tap | grep caskroom/cask >/dev/null 2>&1; then
+if brew tap | grep ^caskroom/cask$ >/dev/null 2>&1; then
   logk
 else
   echo
@@ -239,7 +239,7 @@ brew upgrade
 
 # bash completion:
 logn "Checking bash completion:"
-if brew list | grep bash-completion >/dev/null 2>&1; then
+if brew list | grep ^bash-completion$ >/dev/null 2>&1; then
   logk
 else
   echo
@@ -256,7 +256,7 @@ else
 fi
 
 logn "Checking openssl:"
-if brew list | grep openssl >/dev/null 2>&1; then
+if brew list | grep ^openssl$ >/dev/null 2>&1; then
   logk
 else
   echo
@@ -266,7 +266,7 @@ else
 fi
 
 logn "Checking git:"
-if brew list | grep git >/dev/null 2>&1; then
+if brew list | grep ^git$ >/dev/null 2>&1; then
   logk
 else
   echo
@@ -312,7 +312,7 @@ fi
 logk
 
 logn "Checking httpie:"
-if brew list | grep httpie >/dev/null 2>&1; then
+if brew list | grep ^httpie$ >/dev/null 2>&1; then
   logk
 else
   echo
@@ -322,7 +322,7 @@ else
 fi
 
 logn "Checking mysql:"
-if brew list | grep mysql >/dev/null 2>&1; then
+if brew list | grep ^mysql$ >/dev/null 2>&1; then
   logk
 else
   echo
@@ -332,7 +332,7 @@ else
 fi
 
 logn "Checking percona toolkit:"
-if brew list | grep percona >/dev/null 2>&1; then
+if brew list | grep ^percona-toolkit$ >/dev/null 2>&1; then
   logk
 else
   echo
@@ -342,7 +342,7 @@ else
 fi
 
 logn "Checking liquidprompt:"
-if brew list | grep liquidprompt >/dev/null 2>&1; then
+if brew list | grep ^liquidprompt$ >/dev/null 2>&1; then
   logk
 else
   echo
@@ -360,7 +360,7 @@ else
 fi
 
 logn "Checking iterm2:"
-if [ -d "/Applications/iTerm.app" ] || brew cask list | grep iterm2 >/dev/null 2>&1; then
+if [ -d "/Applications/iTerm.app" ] || brew cask list | grep ^iterm2$ >/dev/null 2>&1; then
   logk
 else
   echo
@@ -383,7 +383,7 @@ fi
 #fi
 
 logn "Checking java:"
-if brew cask list | grep java >/dev/null 2>&1; then
+if brew cask list | grep ^java$ >/dev/null 2>&1; then
   logk
 else
   echo
@@ -425,7 +425,7 @@ else
 fi
 
 logn "Checking jenv:"
-if brew list | grep jenv >/dev/null 2>&1; then
+if brew list | grep ^jenv$ >/dev/null 2>&1; then
   logk
 else
   echo
@@ -451,7 +451,7 @@ else
 fi
 
 logn "Checking maven:"
-if brew list | grep maven >/dev/null 2>&1; then
+if brew list | grep ^maven$ >/dev/null 2>&1; then
   logk
 else
   echo
@@ -461,7 +461,7 @@ else
 fi
 
 logn "Checking groovy:"
-if brew list | grep groovy >/dev/null 2>&1; then
+if brew list | grep ^groovy$ >/dev/null 2>&1; then
   logk
 else
   echo
@@ -470,18 +470,84 @@ else
   logk
 fi
 
-#logn "Checking docker:"
-#if [ -d "/Applications/Docker.app" ] || brew cask list | grep docker >/dev/null 2>&1; then
-#  logk
-#else
-#  echo
-#  log "Installing docker..."
-#  brew cask install docker
-#  logk
-#fi
+######################################
+# Docker Begin
+######################################
+
+# We *DO NOT* run 'Docker for Mac' on purpose.  Docker for Mac does not yet 
+# support bridge networks on the host OS (Mac OS X) into the docker containers,
+# which means you can't run the product (or in IntelliJ) in Mac OS because
+# network connections from the host OS into the docker containers are not possible.
+#
+# More info: https://github.com/docker/docker/issues/22753
+#
+# Because of this pretty severe limitation, we explicitly install the same functionality
+# as individual commands, including most notably virtualbox and docker-machine.  These
+# provide the same functionality as 'Docker for Mac', but allow bridge networks.
+#
+# Note that this approach is also a fully supported usage scenario for Docker.  The
+# Docker documentation explicitly indicates this is a fine approach for 'power users'
+# or scenarios where you might need to run more than one Docker VM.  See this page:
+#
+# https://docs.docker.com/docker-for-mac/docker-toolbox/#setting-up-to-run-docker-for-mac
+#
+# (specifically the 'Docker Toolbox and Docker for Mac coexistence' section).
+
+logn "Checking VirtualBox:"
+if brew cask list | grep ^virtualbox$ >/dev/null 2>&1; then
+  logk
+else
+  echo
+  log "Installing VirtualBox..."
+  brew cask install virtualbox
+  logk
+fi
+
+logn "Checking docker:"
+if brew list | grep ^docker$ >/dev/null 2>&1; then
+  logk
+else
+  echo
+  log "Installing docker..."
+  brew install docker
+  logk
+fi
+
+logn "Checking docker-machine:"
+if brew list | grep ^docker-machine$ >/dev/null 2>&1; then
+  logk
+else
+  echo
+  log "Installing docker-machine..."
+  brew install docker-machine
+  logk
+fi
+
+logn "Checking docker-compose:"
+if brew list | grep ^docker-compose$ >/dev/null 2>&1; then
+  logk
+else
+  echo
+  log "Installing docker-compose..."
+  brew install docker-compose
+  logk
+fi
+
+logn "Checking docker-clean:"
+if brew list | grep ^docker-clean$ >/dev/null 2>&1; then
+  logk
+else
+  echo
+  log "Installing docker-clean..."
+  brew install docker-clean
+  logk
+fi
+######################################
+# Docker End
+######################################
 
 logn "Checking intellij-idea:"
-if [ -d "/Applications/IntelliJ IDEA.app" ] || brew cask list | grep intellij-idea >/dev/null 2>&1; then
+if [ -d "/Applications/IntelliJ IDEA.app" ] || brew cask list | grep ^intellij-idea$ >/dev/null 2>&1; then
   logk
 else
   echo
