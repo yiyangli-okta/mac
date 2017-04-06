@@ -85,6 +85,75 @@ log()   { STRAP_STEP="$*"; echo "--> $*"; }
 logn()  { STRAP_STEP="$*"; printf -- "--> $* "; }
 logk()  { STRAP_STEP="";   echo "OK"; }
 
+##
+# Prompts a user for a value and potential confirmation value, and if both match, places the result
+# in the $1 argument.  Can safely read secure values - see the $3 argument description below.
+#
+# Example usage
+# -------------
+#
+# RESULT=''
+# readval RESULT "Enter your value"
+#
+# # RESULT will now contain the read value.  For example:
+# echo "$RESULT"
+#
+# Example password usage
+# ----------------------
+#
+# readval RESULT "Enter your password" true
+#
+# If $3 is true (i.e. secure = true) nd you don't specify a 4th argument, the user will be prompted
+# twice by default.
+#
+#
+# Arguments:
+#
+#  $1: output variable, required.  The read result will be stored in this variable.
+#
+#  $2: prompt - a string, optional.
+#               Defauls to "Enter value"
+#               Do not end it with a colon character ':', as one will always be printed
+#               at the end of the prompt string automatically.
+#
+#  $3: secure - a boolean, optional.
+#               if true, the user's typing will not echo to the terminal.
+#               if false, the user will see what they type.
+#
+#  $4: confirm - a boolean, optional.
+#                Defaults to true if $secure = true.
+#                if true, the user will be prompted again with an " (again)" suffix added to
+#                the $prompt text.
+##
+readval() {
+  local result=$1
+  local prompt=$2
+  local secure=$3
+  local confirm=$4
+  local first
+  local second
+
+  [ -z "$prompt" ] && prompt="Enter value"
+  # if they didn't specify confirmation and secure is true, default to confirm:
+  [ -z "$confirm" ] && [ "$secure" = true ] && confirm=true
+
+  while [ -z "$first" ] || [ -z "$second" ] || [ "$first" != "$second" ]; do
+      printf "$prompt: "
+      if [ "$secure" = true ]; then read -s first; printf "\n"; else read first; fi
+
+      if [ "$confirm" = true ]; then
+          printf "$prompt (again): "
+          if [ "$secure" = true ]; then read -s second; printf "\n"; else read second; fi
+      else
+        # if we don't need confirmation, simulate a second entry to stop the loop:
+        [ "$confirm" != true ] && second="$first"
+      fi
+
+      [ "$first" != "$second" ] && echo "Values are not equal. Please try again."
+  done
+  eval $result=\$first
+}
+
 _STRAP_MACOSX_VERSION="$(sw_vers -productVersion)"
 echo "$_STRAP_MACOSX_VERSION" | grep $Q -E "^10.(9|10|11|12)" || {
   abort "Run Strap on Mac OS X 10.9/10/11/12."
@@ -266,6 +335,16 @@ else
   logk
 fi
 
+logn "Checking jq:"
+if brew list | grep ^jq$ >/dev/null 2>&1; then
+  logk
+else
+  echo
+  log "Installing jq..."
+  brew install jq
+  logk
+fi
+
 logn "Checking git:"
 if brew list | grep ^git$ >/dev/null 2>&1; then
   logk
@@ -276,24 +355,78 @@ else
   logk
 fi
 
-logn "Configuring Git:"
-if [ -n "$STRAP_GIT_NAME" ] && ! git config user.name >/dev/null; then
-  git config --global user.name "$STRAP_GIT_NAME"
-fi
-
-if [ -n "$STRAP_GIT_EMAIL" ] && ! git config user.email >/dev/null; then
-  git config --global user.email "$STRAP_GIT_EMAIL"
-fi
-
-if [ -n "$STRAP_GITHUB_USER" ] && [ "$(git config --global github.user)" != "$STRAP_GITHUB_USER" ]; then
+logn "Checking git config:"
+if git config --global github.user >/dev/null; then
+  STRAP_GITHUB_USER="$(git config --global github.user)"
+else
+  [ -z "$STRAP_GITHUB_USER" ] && printf "\n" && readval STRAP_GITHUB_USER "Enter your GitHub username" false true
   git config --global github.user "$STRAP_GITHUB_USER"
 fi
 
-if ! git config push.default >/dev/null; then
+_STRAP_KEYCHAIN_ENTRY_LABEL="Okta Strap GitHub API personal access token"
+_STRAP_GITHUB_API_TOKEN=
+
+if security find-internet-password -a "$STRAP_GITHUB_USER" -s api.github.com -l "$_STRAP_KEYCHAIN_ENTRY_LABEL" >/dev/null 2>&1; then
+  _STRAP_GITHUB_API_TOKEN=$(security find-internet-password -a "$STRAP_GITHUB_USER" -s api.github.com -l "$_STRAP_KEYCHAIN_ENTRY_LABEL" -w)
+else
+  # no token yet, we need to get one.  This requires a github password:
+  [ -z "$STRAP_GITHUB_PASSWORD" ] && readval STRAP_GITHUB_PASSWORD "Enter (or cmd-v paste) your GitHub password" true
+
+  _STRAP_UTC_DATE=$(date -u +%FT%TZ)
+
+  JSON=$(curl --silent --show-error \
+      -u "$STRAP_GITHUB_USER:$STRAP_GITHUB_PASSWORD" \
+      -H "Content-Type: application/json" -X POST -d \
+      "{\"scopes\":[\"repo\",\"admin:org\",\"admin:public_key\",\"admin:repo_hook\",\"admin:org_hook\",\"gist\",\"notifications\",\"user\",\"delete_repo\",\"admin:gpg_key\"],\"note\":\"Okta Strap-generated token, created at $_STRAP_UTC_DATE\"}" \
+      https://api.github.com/authorizations)
+
+  _STRAP_GITHUB_API_TOKEN=$(echo "$JSON" | jq -er '.token')
+  _STRAP_GITHUB_API_TOKEN_URL=$(echo "$JSON" | jq -er '.url')
+
+  if [ -z "$_STRAP_GITHUB_API_TOKEN" ] || [ "$_STRAP_GITHUB_API_TOKEN" == "null" ]; then
+      echo "Unable to create GitHub API personal access token"
+      exit 1
+  fi
+
+  # save to mac os x keychain for secure storage:
+  security add-internet-password -r htps -s api.github.com -l "$_STRAP_KEYCHAIN_ENTRY_LABEL" -j "$_STRAP_GITHUB_API_TOKEN_URL" -t http -a "$STRAP_GITHUB_USER" -w "$_STRAP_GITHUB_API_TOKEN" || { echo "Unable to save GitHub API personal access token to Mac OS X Keychain"; exit 1; }
+fi
+
+if git config --global user.email >/dev/null; then
+  STRAP_GIT_EMAIL="$(git config --global user.email)"
+else
+  if [ -z "$STRAP_GIT_EMAIL" ]; then
+
+    #try to find it from the GitHub account:
+    JSON=$(curl --silent --show-error \
+      -u "$STRAP_GITHUB_USER:$_STRAP_GITHUB_API_TOKEN" \
+      https://api.github.com/user/emails)
+
+    STRAP_GIT_EMAIL=$(echo "$JSON" | jq -er '.[] | select(.primary == true) | .email')
+
+    if [ -z "$STRAP_GIT_EMAIL" ] || [ "$STRAP_GIT_EMAIL" == "null" ]; then
+      #read from the user, but ensure the read value has an 'at' sign:
+      while [[ "$STRAP_GIT_EMAIL" != *"@"* ]]; do
+        readval STRAP_GIT_EMAIL "Enter your email address" false true
+      done
+    fi
+  fi
+
+  git config --global user.email "$STRAP_GIT_EMAIL"
+fi
+
+if git config --global user.name >/dev/null; then
+  STRAP_GIT_NAME="$(git config --global user.name)"
+else
+  [ -z "$STRAP_GIT_NAME" ] && readval STRAP_GIT_NAME "Enter your first and last name"
+  git config --global user.name "$STRAP_GIT_NAME"
+fi
+
+if ! git config --global push.default >/dev/null; then
   git config --global push.default simple
 fi
 
-if ! git config branch.autosetupmerge >/dev/null; then
+if ! git config --global branch.autosetupmerge >/dev/null; then
   git config --global branch.autosetupmerge always
 fi
 
@@ -303,41 +436,19 @@ if git credential-osxkeychain 2>&1 | grep $Q "git.credential-osxkeychain"; then
     git config --global credential.helper osxkeychain
   fi
 
-  if [ -n "$STRAP_GITHUB_USER" ] && [ -n "$STRAP_GITHUB_TOKEN" ]; then
-    printf "protocol=https\nhost=github.com\n" | git credential-osxkeychain erase
-    printf "protocol=https\nhost=github.com\nusername=%s\npassword=%s\n" \
-          "$STRAP_GITHUB_USER" "$STRAP_GITHUB_TOKEN" \
-          | git credential-osxkeychain store
-  fi
+  printf "protocol=https\nhost=github.com\n" | git credential-osxkeychain erase
+  printf "protocol=https\nhost=github.com\nusername=%s\npassword=%s\n" \
+        "$STRAP_GITHUB_USER" "$STRAP_GITHUB_TOKEN" \
+        | git credential-osxkeychain store
 fi
+
 logk
 
 #####################################
 # SSH Begin
 #####################################
 
-readValue() {
-  local result=$1
-  local name=$2
-  local secure=$3
-
-  [ -z "$name" ] && name="value"
-
-  local val
-
-  while [ -z "$val" ]; do
-      echo "Enter $name:"
-
-      if [ "$secure" = true ]; then
-        read -s val
-      else
-        read val
-      fi
-  done
-  eval $result=\$val
-}
-
-logn "Configuring SSH:"
+logn "Checking SSH config:"
 _STRAP_SSH_DIR="$HOME/.ssh"
 mkdir -p $_STRAP_SSH_DIR
 chmod 700 $_STRAP_SSH_DIR
@@ -356,7 +467,7 @@ _STRAP_SSH_KEY="$_STRAP_SSH_DIR/id_rsa"
 _STRAP_SSH_PUB_KEY="$_STRAP_SSH_KEY.pub"
 _STRAP_SSH_KEY_PASSPHRASE="$(openssl rand 48 -base64)"
 
-if [[ $_STRAP_MACOSX_VERSION == 10.12* ]] && [ ! -f "$_STRAP_SSH_CONFIG_FILE" ]; then
+if [[ $_STRAP_MACOSX_VERSION == "10.12"* ]] && [ ! -f "$_STRAP_SSH_CONFIG_FILE" ]; then
   touch $_STRAP_SSH_CONFIG_FILE
   echo 'Host *' >> $_STRAP_SSH_CONFIG_FILE
   echo '  UseKeychain yes' >> $_STRAP_SSH_CONFIG_FILE
@@ -367,7 +478,7 @@ _strap_created_ssh_key=false
 
 if [ ! -f "$_STRAP_SSH_KEY" ]; then
 
-  [ -z "$STRAP_GIT_EMAIL" ] && readValue STRAP_GIT_EMAIL "your email address"
+  [ -z "$STRAP_GIT_EMAIL" ] && readval STRAP_GIT_EMAIL "Enter your email address" false true
 
   _STRAP_SSH_AGENT_PID=$(ps aux|grep '[s]sh-agent -s'|sed -E -n 's/[^[:space:]]+[[:space:]]+([[:digit:]]+).*/\1/p')
   if [ -z "$_STRAP_SSH_AGENT_PID" ]; then
@@ -399,23 +510,20 @@ logk
 #####################################
 # Github SSH Key Begin
 #####################################
-logn "Checking GitHub SSH Config:"
+logn "Checking GitHub SSH config:"
 
 _STRAP_GITHUB_KNOWN_HOST="github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ=="
 
 if [ $_strap_created_ssh_key = true ]; then
   _STRAP_SSH_PUB_KEY_CONTENTS="$(<$_STRAP_SSH_PUB_KEY)"
 
-  [ -z "$STRAP_GITHUB_USER" ] && readValue STRAP_GITHUB_USER "your GitHub username"
-  [ -z "$STRAP_GITHUB_PASSWORD" ] && readValue STRAP_GITHUB_PASSWORD "your GitHub password" true
-
   _NOW="$(date -u +%FT%TZ)"
   _RESULT=$(curl --silent --show-error --output /dev/null --write-out %{http_code} \
-         -u "$STRAP_GITHUB_USER:$STRAP_GITHUB_PASSWORD" \
+         -u "$STRAP_GITHUB_USER:$_STRAP_GITHUB_API_TOKEN" \
          -d "{ \"title\": \"Okta Strap-generated RSA public key on $_NOW\", \"key\": \"$_STRAP_SSH_PUB_KEY_CONTENTS\" }" \
          https://api.github.com/user/keys) 2>/dev/null
 
-  [ "$_RESULT" -ne "201" ] && echo "Unable to upload Strap-generated RSA private key" && exit 1;
+  [ "$_RESULT" -ne "201" ] && echo "Unable to upload Strap-generated RSA private key to GitHub" && exit 1;
 fi
 
 # Add github to known hosts:
