@@ -315,13 +315,42 @@ logk
 #####################################
 # SSH Begin
 #####################################
+
+readValue() {
+  local result=$1
+  local name=$2
+  local secure=$3
+
+  [ -z "$name" ] && name="value"
+
+  local val
+
+  while [ -z "$val" ]; do
+      echo "Enter $name:"
+
+      if [ "$secure" = true ]; then
+        read -s val
+      else
+        read val
+      fi
+  done
+  eval $result=\$val
+}
+
 logn "Configuring SSH:"
 _STRAP_SSH_DIR="$HOME/.ssh"
-_STRAP_SSH_CONFIG_FILE="$_STRAP_SSH_DIR/config"
 mkdir -p $_STRAP_SSH_DIR
 chmod 700 $_STRAP_SSH_DIR
-[ -f "$_STRAP_SSH_DIR/authorized_keys" ] || touch "$_STRAP_SSH_DIR/authorized_keys"
-chmod 644 "$_STRAP_SSH_DIR/authorized_keys"
+
+_STRAP_SSH_CONFIG_FILE="$_STRAP_SSH_DIR/config"
+
+_STRAP_SSH_AUTHZ_KEYS="$_STRAP_SSH_DIR/authorized_keys"
+[ -f "$_STRAP_SSH_AUTHZ_KEYS" ] || touch "$_STRAP_SSH_AUTHZ_KEYS"
+chmod 600 "$_STRAP_SSH_AUTHZ_KEYS"
+
+_STRAP_SSH_KNOWN_HOSTS="$_STRAP_SSH_DIR/known_hosts"
+[ -f "$_STRAP_SSH_KNOWN_HOSTS" ] || touch "$_STRAP_SSH_KNOWN_HOSTS"
+chmod 600 "$_STRAP_SSH_KNOWN_HOSTS"
 
 _STRAP_SSH_KEY="$_STRAP_SSH_DIR/id_rsa"
 _STRAP_SSH_PUB_KEY="$_STRAP_SSH_KEY.pub"
@@ -329,16 +358,16 @@ _STRAP_SSH_KEY_PASSPHRASE="$(openssl rand 48 -base64)"
 
 if [[ $_STRAP_MACOSX_VERSION == 10.12* ]] && [ ! -f "$_STRAP_SSH_CONFIG_FILE" ]; then
   touch $_STRAP_SSH_CONFIG_FILE
-  echo ' Host *' >> $_STRAP_SSH_CONFIG_FILE
-  echo '   UseKeychain yes' >> $_STRAP_SSH_CONFIG_FILE
-  echo '   AddKeysToAgent yes' >> $_STRAP_SSH_CONFIG_FILE
+  echo 'Host *' >> $_STRAP_SSH_CONFIG_FILE
+  echo '  UseKeychain yes' >> $_STRAP_SSH_CONFIG_FILE
+  echo '  AddKeysToAgent yes' >> $_STRAP_SSH_CONFIG_FILE
 fi
 
 _strap_created_ssh_key=false
 
 if [ ! -f "$_STRAP_SSH_KEY" ]; then
 
-  while [ -z "$STRAP_GIT_EMAIL" ]; do echo "Enter your email address:" && read STRAP_GIT_EMAIL; done;
+  [ -z "$STRAP_GIT_EMAIL" ] && readValue STRAP_GIT_EMAIL "your email address"
 
   _STRAP_SSH_AGENT_PID=$(ps aux|grep '[s]sh-agent -s'|sed -E -n 's/[^[:space:]]+[[:space:]]+([[:digit:]]+).*/\1/p')
   if [ -z "$_STRAP_SSH_AGENT_PID" ]; then
@@ -358,8 +387,8 @@ EOF
 
 fi
 
-chmod 600 "$_STRAP_SSH_KEY"
-chmod 600 "$_STRAP_SSH_PUB_KEY"
+chmod 400 "$_STRAP_SSH_KEY"
+chmod 400 "$_STRAP_SSH_PUB_KEY"
 [ -f "$_STRAP_SSH_CONFIG_FILE" ] && chmod 600 "$_STRAP_SSH_CONFIG_FILE"
 
 logk
@@ -370,13 +399,15 @@ logk
 #####################################
 # Github SSH Key Begin
 #####################################
-logn "Checking GitHub SSH Key:"
+logn "Checking GitHub SSH Config:"
+
+_STRAP_GITHUB_KNOWN_HOST="github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ=="
+
 if [ $_strap_created_ssh_key = true ]; then
-  _STRAP_SSH_PUB_KEY="$HOME/.ssh/id_rsa.pub"
   _STRAP_SSH_PUB_KEY_CONTENTS="$(<$_STRAP_SSH_PUB_KEY)"
 
-  while [ -z "$STRAP_GITHUB_USER" ]; do echo "Enter your GitHub username:" && read STRAP_GITHUB_USER; done;
-  while [ -z "$STRAP_GITHUB_PASSWORD" ]; do echo "Enter your GitHub password:" && read -s STRAP_GITHUB_PASSWORD; done;
+  [ -z "$STRAP_GITHUB_USER" ] && readValue STRAP_GITHUB_USER "your GitHub username"
+  [ -z "$STRAP_GITHUB_PASSWORD" ] && readValue STRAP_GITHUB_PASSWORD "your GitHub password" true
 
   _NOW="$(date -u +%FT%TZ)"
   _RESULT=$(curl --silent --show-error --output /dev/null --write-out %{http_code} \
@@ -386,6 +417,17 @@ if [ $_strap_created_ssh_key = true ]; then
 
   [ "$_RESULT" -ne "201" ] && echo "Unable to upload Strap-generated RSA private key" && exit 1;
 fi
+
+# Add github to known hosts:
+if [ ! -f "$_STRAP_SSH_KNOWN_HOSTS" ]; then
+  touch "$_STRAP_SSH_KNOWN_HOSTS"
+fi
+
+if ! grep "^github.com" "$_STRAP_SSH_KNOWN_HOSTS" >/dev/null 2>&1; then
+  echo "$_STRAP_GITHUB_KNOWN_HOST" >> "$_STRAP_SSH_KNOWN_HOSTS"
+fi
+
+chmod 600 "$_STRAP_SSH_KNOWN_HOSTS"
 
 logk
 #####################################
