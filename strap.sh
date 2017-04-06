@@ -312,6 +312,86 @@ if git credential-osxkeychain 2>&1 | grep $Q "git.credential-osxkeychain"; then
 fi
 logk
 
+#####################################
+# SSH Begin
+#####################################
+logn "Configuring SSH:"
+_STRAP_SSH_DIR="$HOME/.ssh"
+_STRAP_SSH_CONFIG_FILE="$_STRAP_SSH_DIR/config"
+mkdir -p $_STRAP_SSH_DIR
+chmod 700 $_STRAP_SSH_DIR
+[ -f "$_STRAP_SSH_DIR/authorized_keys" ] || touch "$_STRAP_SSH_DIR/authorized_keys"
+chmod 644 "$_STRAP_SSH_DIR/authorized_keys"
+
+_STRAP_SSH_KEY="$_STRAP_SSH_DIR/id_rsa"
+_STRAP_SSH_PUB_KEY="$_STRAP_SSH_KEY.pub"
+_STRAP_SSH_KEY_PASSPHRASE="$(openssl rand 48 -base64)"
+
+if [[ $_STRAP_MACOSX_VERSION == 10.12* ]] && [ ! -f "$_STRAP_SSH_CONFIG_FILE" ]; then
+  touch $_STRAP_SSH_CONFIG_FILE
+  echo ' Host *' >> $_STRAP_SSH_CONFIG_FILE
+  echo '   UseKeychain yes' >> $_STRAP_SSH_CONFIG_FILE
+  echo '   AddKeysToAgent yes' >> $_STRAP_SSH_CONFIG_FILE
+fi
+
+_strap_created_ssh_key=false
+
+if [ ! -f "$_STRAP_SSH_KEY" ]; then
+
+  while [ -z "$STRAP_GIT_EMAIL" ]; do echo "Enter your email address:" && read STRAP_GIT_EMAIL; done;
+
+  _STRAP_SSH_AGENT_PID=$(ps aux|grep '[s]sh-agent -s'|sed -E -n 's/[^[:space:]]+[[:space:]]+([[:digit:]]+).*/\1/p')
+  if [ -z "$_STRAP_SSH_AGENT_PID" ]; then
+    ssh-agent -s >/dev/null
+  fi
+
+  ssh-keygen -t rsa -b 4096 -C "strap auto-generated key for $STRAP_GIT_EMAIL" -P "$_STRAP_SSH_KEY_PASSPHRASE" -f "$_STRAP_SSH_KEY" -q
+
+  _strap_created_ssh_key=true
+
+  expect << EOF
+    spawn ssh-add -K $_STRAP_SSH_KEY
+    expect "Enter passphrase"
+    send "$_STRAP_SSH_KEY_PASSPHRASE\r"
+    expect eof
+EOF
+
+fi
+
+chmod 600 "$_STRAP_SSH_KEY"
+chmod 600 "$_STRAP_SSH_PUB_KEY"
+[ -f "$_STRAP_SSH_CONFIG_FILE" ] && chmod 600 "$_STRAP_SSH_CONFIG_FILE"
+
+logk
+#####################################
+# SSH End
+#####################################
+
+#####################################
+# Github SSH Key Begin
+#####################################
+logn "Checking GitHub SSH Key:"
+if [ $_strap_created_ssh_key = true ]; then
+  _STRAP_SSH_PUB_KEY="$HOME/.ssh/id_rsa.pub"
+  _STRAP_SSH_PUB_KEY_CONTENTS="$(<$_STRAP_SSH_PUB_KEY)"
+
+  while [ -z "$STRAP_GITHUB_USER" ]; do echo "Enter your GitHub username:" && read STRAP_GITHUB_USER; done;
+  while [ -z "$STRAP_GITHUB_PASSWORD" ]; do echo "Enter your GitHub password:" && read -s STRAP_GITHUB_PASSWORD; done;
+
+  _NOW="$(date -u +%FT%TZ)"
+  _RESULT=$(curl --silent --show-error --output /dev/null --write-out %{http_code} \
+         -u "$STRAP_GITHUB_USER:$STRAP_GITHUB_PASSWORD" \
+         -d "{ \"title\": \"Okta Strap-generated RSA public key on $_NOW\", \"key\": \"$_STRAP_SSH_PUB_KEY_CONTENTS\" }" \
+         https://api.github.com/user/keys) 2>/dev/null
+
+  [ "$_RESULT" -ne "201" ] && echo "Unable to upload Strap-generated RSA private key" && exit 1;
+fi
+
+logk
+#####################################
+# Github SSH Key End
+#####################################
+
 logn "Checking httpie:"
 if brew list | grep ^httpie$ >/dev/null 2>&1; then
   logk
