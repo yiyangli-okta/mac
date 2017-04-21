@@ -335,6 +335,17 @@ else
   logk
 fi
 
+logn "Checking Okta Root CA Cert in OS X keychain:"
+_STRAP_USER_DIR="$HOME/.strap"
+mkdir -p "$_STRAP_USER_DIR"
+_STRAP_OKTA_ROOT_CA_CERT="$_STRAP_USER_DIR/Okta-Root-CA.pem"
+[ -f "$_STRAP_OKTA_ROOT_CA_CERT" ] || curl -sL http://ca.okta.com/Okta-Root-CA.pem -o "$_STRAP_OKTA_ROOT_CA_CERT"
+if ! sudo security find-certificate -c "Okta Root CA" /Library/Keychains/System.keychain >/dev/null 2>&1; then
+  sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "$_STRAP_OKTA_ROOT_CA_CERT"
+fi
+# sudo security delete-certificate -c "Okta Root CA"
+logk
+
 logn "Checking jq:"
 if brew list | grep ^jq$ >/dev/null 2>&1; then
   logk
@@ -680,6 +691,22 @@ else
   jenv enable-plugin springboot
   logk
 fi
+
+logn "Checking Okta Root CA Cert in Java Keystore:"
+if ! sudo keytool -list -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "oktaroot" >/dev/null 2>&1; then
+  sudo keytool -import -trustcacerts -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "oktaroot" -file "$_STRAP_OKTA_ROOT_CA_CERT" >/dev/null 2>&1
+fi
+#sudo keytool -delete -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "oktaroot"
+logk
+
+logn "Checking Okta Internet CA Cert in Java Keystore:"
+_STRAP_OKTA_NET_CA_CERT="$_STRAP_USER_DIR/Okta-Internet-CA.pem"
+[ -f "$_STRAP_OKTA_NET_CA_CERT" ] || curl -sL http://ca.okta.com/Okta-Internet-CA.pem -o "$_STRAP_OKTA_NET_CA_CERT"
+if ! sudo keytool -list -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "mavensrv" >/dev/null 2>&1; then
+  sudo keytool -import -trustcacerts -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "mavensrv" -file "$_STRAP_OKTA_NET_CA_CERT" >/dev/null 2>&1
+fi
+#sudo keytool -delete -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "mavensrv"
+logk
 
 logn "Checking maven:"
 if brew list | grep ^maven$ >/dev/null 2>&1; then
