@@ -196,7 +196,7 @@ if [ -n "$STRAP_GIT_NAME" ] && [ -n "$STRAP_GIT_EMAIL" ]; then
 fi
 logk
 
-logn "Ensuring keyboard and finder settings:"
+logn "Checking keyboard and finder settings:"
 # speed up the keyboard.  Defaults are *slow* for developers:
 defaults write -g KeyRepeat -int 2;
 defaults write -g InitialKeyRepeat -int 14;
