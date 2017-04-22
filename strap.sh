@@ -294,46 +294,62 @@ else
 fi
 
 logn "Checking Homebrew Cask:"
-if brew tap | grep ^caskroom/cask$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Tapping caskroom/cask..."
+if ! brew tap | grep ^caskroom/cask$ >/dev/null 2>&1; then
+  echo && log "Tapping caskroom/cask..."
   brew tap caskroom/cask
-  logk
 fi
+logk
 
 logn "Checking Homebrew updates:"
 brew update
 brew upgrade
 
-# bash completion:
-logn "Checking bash completion:"
-if brew list | grep ^bash-completion$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing bash completion..."
-  brew install bash-completion
-  if ! grep -q bash_completion "$HOME/.bash_profile"; then
-    echo '' >> ~/.bash_profile;
-    echo '# bash completion' >> ~/.bash_profile;
-    echo 'if [ -f $(brew --prefix)/etc/bash_completion ]; then' >> ~/.bash_profile;
-    echo '  . $(brew --prefix)/etc/bash_completion' >> ~/.bash_profile;
-    echo 'fi' >> ~/.bash_profile;
+ensure_formula() {
+  local command="$1"
+  local formula="$2"
+  local name="$3"
+  [ -z "$1" ] && abort "pkg_ensure: \$1 must be the command"
+  [ -z "$2" ] && abort "pkg_ensure: \$2 must be the formula id"
+  [ -z "$3" ] && name="$formula"
+
+  logn "Checking $name:"
+  if ! ${command} list | grep ^${formula}$ >/dev/null 2>&1; then
+    echo && log "Installing $name..."
+    ${command} install ${formula}
   fi
   logk
-fi
+}
+ensure_brew() { ensure_formula "brew" $1 $2; }
+ensure_cask() {
+  if [ ! -z "$3" ] && [ -d "$3" ]; then
+    logn "Checking $1:"
+    logk
+  else
+    ensure_formula "brew cask" $1 $2
+  fi
+}
+ensure_brew_bash_profile() {
+  local formula="$1"
+  local path="$2"
+  [ -z "$formula" ] && abort "ensure_brew_bash_profile: \$1 must be the formula id"
+  [ -z "$path" ] && abort "ensure_brew_bash_profile: \$1 must be the brew script relative path"
 
-logn "Checking openssl:"
-if brew list | grep ^openssl$ >/dev/null 2>&1; then
+  logn "Checking ${formula} in ~/.bash_profile:"
+  if ! grep -q ${path} "$HOME/.bash_profile"; then
+    echo && log "Enabling ${formula} in ~/.bash_profile"
+    echo '' >> "$HOME/.bash_profile"
+    echo "# strap:${formula}" >> "$HOME/.bash_profile"
+    echo "if [ -f \$(brew --prefix)/${path} ]; then" >> "$HOME/.bash_profile"
+    echo "  . \$(brew --prefix)/${path}" >> "$HOME/.bash_profile"
+    echo 'fi' >> "$HOME/.bash_profile"
+  fi
   logk
-else
-  echo
-  log "Installing openssl..."
-  brew install openssl
-  logk
-fi
+}
+
+ensure_brew "bash-completion"
+ensure_brew_bash_profile "bash-completion" "etc/bash_completion"
+
+ensure_brew "openssl"
 
 logn "Checking Okta Root CA Cert in OS X keychain:"
 _STRAP_USER_DIR="$HOME/.strap"
@@ -346,25 +362,8 @@ fi
 # sudo security delete-certificate -c "Okta Root CA"
 logk
 
-logn "Checking jq:"
-if brew list | grep ^jq$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing jq..."
-  brew install jq
-  logk
-fi
-
-logn "Checking git:"
-if brew list | grep ^git$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing git..."
-  brew install git
-  logk
-fi
+ensure_brew "jq"
+ensure_brew "git"
 
 logn "Checking git config:"
 if git config --global github.user >/dev/null; then
@@ -553,118 +552,13 @@ logk
 # Github SSH Key End
 #####################################
 
-logn "Checking httpie:"
-if brew list | grep ^httpie$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing httpie..."
-  brew install httpie
-  logk
-fi
-
-logn "Checking mysql:"
-if brew list | grep ^mysql$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing mysql..."
-  brew install mysql
-  logk
-fi
-
-logn "Checking percona toolkit:"
-if brew list | grep ^percona-toolkit$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing percona toolkit..."
-  brew install percona-toolkit
-  logk
-fi
-
-logn "Checking liquidprompt:"
-if brew list | grep ^liquidprompt$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing liquidprompt..."
-  brew install liquidprompt
-  
-  if ! grep -q liquidprompt "$HOME/.bash_profile"; then
-    echo '' >> ~/.bash_profile;
-    echo '# liquidprompt' >> ~/.bash_profile;
-    echo 'if [ -f $(brew --prefix)/share/liquidprompt ]; then' >> ~/.bash_profile;
-    echo '  . $(brew --prefix)/share/liquidprompt' >> ~/.bash_profile;
-    echo 'fi' >> ~/.bash_profile;
-  fi
-  logk
-fi
-
-logn "Checking iterm2:"
-if [ -d "/Applications/iTerm.app" ] || brew cask list | grep ^iterm2$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing iterm2..."
-  brew cask install iterm2
-  logk
-fi
-
-# Chrome has been a battery and memory hog lately and Safari has had
-# much better for performance.  Skipping Chrome as a result for now:
-#
-#logn "Checking google-chrome:"
-#if [ -d "/Applications/Google Chrome.app" ] || brew cask list | grep google-chrome >/dev/null 2>&1; then
-#  logk
-#else
-#  echo
-#  log "Installing google-chrome..."
-#  brew cask install google-chrome
-#  logk
-#fi
-
-logn "Checking java:"
-if brew cask list | grep ^java$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing java..."
-  brew cask install java
-  logk
-fi
-
-# Don't set JAVA_HOME or modify .bash_profile - jenv with the
-# export plugin (enabled) below will set JAVA_HOME as necessary
-#
-# We just set it here because we need to reference the installation
-# for the JCE install next:
-[ -z "$JAVA_HOME" ] && JAVA_HOME="$(/usr/libexec/java_home)"
-[ -z "$JAVA_HOME" ] && abort "JAVA_HOME cannot be determined."
-
-logn "Checking java unlimited cryptography:"
-JCE_DIR="$JAVA_HOME/jre/lib/security"
-if [ -f "$JCE_DIR/local_policy.jar.orig" ]; then
-  logk
-else
-  echo
-  log "Installing java unlimited cryptography..."
-  cd $JCE_DIR
-  # backup existing JVM files that we will replace just in case:
-  sudo mv local_policy.jar local_policy.jar.orig
-  sudo mv US_export_policy.jar US_export_policy.jar.orig
-  sudo curl -sLO 'http://download.oracle.com/otn-pub/java/jce/8/jce_policy-8.zip' -H 'Cookie: oraclelicense=accept-securebackup-cookie'
-  sudo unzip -q jce_policy-8.zip
-  sudo mv UnlimitedJCEPolicyJDK8/US_export_policy.jar .
-  sudo mv UnlimitedJCEPolicyJDK8/local_policy.jar .
-  sudo chown root:wheel US_export_policy.jar
-  sudo chown root:wheel local_policy.jar
-  # cleanup download file:
-  sudo rm -rf jce_policy-8.zip
-  sudo rm -rf UnlimitedJCEPolicyJDK8
-  cd ~
-  logk
-fi
+ensure_brew "httpie"
+ensure_brew "mysql"
+ensure_brew "percona-toolkit"
+ensure_brew "liquidprompt"
+ensure_brew_bash_profile "liquidprompt" "share/liquidprompt"
+ensure_cask "java"
+ensure_cask "jce-unlimited-strength-policy"
 
 logn "Checking jenv:"
 if brew list | grep ^jenv$ >/dev/null 2>&1; then
@@ -673,14 +567,6 @@ else
   echo
   log "Installing jenv..."
   brew install jenv
-
-  if ! grep -q jenv "$HOME/.bash_profile"; then
-    echo '' >> ~/.bash_profile;
-    echo '# jenv (will also set JAVA_HOME env var due to jenv export plugin)' >> ~/.bash_profile;
-    echo 'export PATH="$HOME/.jenv/bin:$PATH"' >> ~/.bash_profile;
-    echo 'if command -v jenv >/dev/null; then eval "$(jenv init -)"; fi;' >> ~/.bash_profile;
-  fi
-
   export PATH="$HOME/.jenv/bin:$PATH"
   eval "$(jenv init -)"
   jenv add "$(/usr/libexec/java_home)"
@@ -691,6 +577,15 @@ else
   jenv enable-plugin springboot
   logk
 fi
+logn "Checking jenv in ~/.bash_profile:"
+if ! grep -q jenv "$HOME/.bash_profile"; then
+  echo && log "Enabling jenv in ~/.bash_profile..."
+  echo '' >> ~/.bash_profile;
+  echo '# spin:jenv (will also set JAVA_HOME env var due to jenv export plugin)' >> ~/.bash_profile;
+  echo 'export PATH="$HOME/.jenv/bin:$PATH"' >> ~/.bash_profile;
+  echo 'if command -v jenv >/dev/null; then eval "$(jenv init -)"; fi;' >> ~/.bash_profile;
+fi
+logk
 
 logn "Checking Okta Root CA Cert in Java Keystore:"
 if ! sudo keytool -list -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "oktaroot" >/dev/null 2>&1; then
@@ -708,25 +603,9 @@ fi
 #sudo keytool -delete -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "mavensrv"
 logk
 
-logn "Checking maven:"
-if brew list | grep ^maven$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing maven..."
-  brew install maven
-  logk
-fi
+ensure_brew "maven"
+ensure_brew "groovy"
 
-logn "Checking groovy:"
-if brew list | grep ^groovy$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing groovy..."
-  brew install groovy
-  logk
-fi
 
 ######################################
 # Docker Begin
@@ -750,76 +629,25 @@ fi
 # https://docs.docker.com/docker-for-mac/docker-toolbox/#setting-up-to-run-docker-for-mac
 #
 # (specifically the 'Docker Toolbox and Docker for Mac coexistence' section).
-
-logn "Checking VirtualBox:"
-if brew cask list | grep ^virtualbox$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing VirtualBox..."
-  brew cask install virtualbox
-  logk
-fi
-
-logn "Checking docker:"
-if brew list | grep ^docker$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing docker..."
-  brew install docker
-  logk
-fi
-
-logn "Checking docker-machine:"
-if brew list | grep ^docker-machine$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing docker-machine..."
-  brew install docker-machine
-  logk
-fi
-
-logn "Checking docker-compose:"
-if brew list | grep ^docker-compose$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing docker-compose..."
-  brew install docker-compose
-  logk
-fi
-
-logn "Checking docker-clean:"
-if brew list | grep ^docker-clean$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing docker-clean..."
-  brew install docker-clean
-  logk
-fi
+ensure_cask "virtualbox"
+ensure_brew "docker"
+ensure_brew "docker-machine"
+ensure_brew "docker-compose"
+ensure_brew "docker-clean"
 ######################################
 # Docker End
 ######################################
 
-logn "Checking intellij-idea:"
-if [ -d "/Applications/IntelliJ IDEA.app" ] || brew cask list | grep ^intellij-idea$ >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing intellij-idea..."
-  brew cask install intellij-idea
-  logk
-  #echo
-  #log "Installing GMavenPlus plugin for intellij-idea..."
-  #INTELLIJ_VERSION=`brew cask info intellij-idea | head -n1 | awk 'BEGIN { FS = "[:. ]" }; { print $3"."$4 }'`
-  #curl -s \
-  #   https://raw.githubusercontent.com/mycila/gmavenplus-intellij-plugin/master/gmavenplus-intellij-plugin.jar > \
-  #   ~/Library/Application\ Support/IntelliJIdea$INTELLIJ_VERSION/gmavenplus-intellij-plugin.jar
-  #logk
-fi
+ensure_cask "iterm2" "iTerm2" "/Applications/iTerm.app"
+ensure_cask "intellij-idea" "intellij-idea" "/Applications/IntelliJ IDEA.app"
+# TODO: add gmavenplus plugin to intellij
+#echo
+#log "Installing GMavenPlus plugin for intellij-idea..."
+#INTELLIJ_VERSION=`brew cask info intellij-idea | head -n1 | awk 'BEGIN { FS = "[:. ]" }; { print $3"."$4 }'`
+#curl -s \
+#   https://raw.githubusercontent.com/mycila/gmavenplus-intellij-plugin/master/gmavenplus-intellij-plugin.jar > \
+#   ~/Library/Application\ Support/IntelliJIdea$INTELLIJ_VERSION/gmavenplus-intellij-plugin.jar
+#logk
 
 STRAP_SUCCESS="1"
 log "Your system is now Strap'd!"
