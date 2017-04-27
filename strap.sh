@@ -313,7 +313,7 @@ ensure_formula() {
   [ -z "$3" ] && name="$formula"
 
   logn "Checking $name:"
-  if ! ${command} list | grep ^${formula}$ >/dev/null 2>&1; then
+  if ! ${command} list ${formula} >/dev/null 2>&1; then
     echo && log "Installing $name..."
     ${command} install ${formula}
   fi
@@ -582,7 +582,7 @@ logn "Checking jenv in ~/.bash_profile:"
 if ! grep -q jenv "$HOME/.bash_profile"; then
   echo && log "Enabling jenv in ~/.bash_profile..."
   echo '' >> ~/.bash_profile;
-  echo '# spin:jenv (will also set JAVA_HOME env var due to jenv export plugin)' >> ~/.bash_profile;
+  echo '# strap:jenv (will also set JAVA_HOME env var due to jenv export plugin)' >> ~/.bash_profile;
   echo 'export PATH="$HOME/.jenv/bin:$PATH"' >> ~/.bash_profile;
   echo 'if command -v jenv >/dev/null; then eval "$(jenv init -)"; fi;' >> ~/.bash_profile;
 fi
@@ -606,7 +606,8 @@ logk
 
 ensure_brew "maven"
 ensure_brew "groovy"
-
+ensure_brew "lhazlewood/tap/spin"
+brew pin spin
 
 ######################################
 # Docker Begin
