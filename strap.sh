@@ -552,6 +552,7 @@ logk
 # Github SSH Key End
 #####################################
 
+ensure_brew "gnupg"
 ensure_brew "httpie"
 ensure_brew "mysql"
 ensure_brew "percona-toolkit"
