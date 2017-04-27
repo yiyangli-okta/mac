@@ -607,7 +607,6 @@ logk
 ensure_brew "maven"
 ensure_brew "groovy"
 ensure_brew "lhazlewood/tap/spin"
-brew pin spin
 
 ######################################
 # Docker Begin
