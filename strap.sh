@@ -650,5 +650,25 @@ ensure_cask "intellij-idea" "intellij-idea" "/Applications/IntelliJ IDEA.app"
 #   ~/Library/Application\ Support/IntelliJIdea$INTELLIJ_VERSION/gmavenplus-intellij-plugin.jar
 #logk
 
+logn 'Checking /etc/hosts loopback aliases:'
+ensure_loopback() {
+  local alias="$1" && [ -z "$1" ] && abort 'ensure_loopback: $1 must be an alias'
+  alias="$(echo -e ${alias} | tr -d '[:space:]')" # strip any whitespace in the hostname
+  local file="/etc/hosts"
+  if ! grep -F "${alias}" "$file" >/dev/null 2>&1; then
+    sudo bash -c "echo \"127.0.0.1 ${alias}\" >> \"$file\""
+  fi
+}
+_srcfilename="loopback-aliases.txt"
+_srcfile="$HOME/.strap/okta/$_srcfilename"
+if [ ! -f "$_srcfile" ]; then
+  mkdir -p "$HOME/.strap/okta"
+  curl -H "Authorization: token $_STRAP_GITHUB_API_TOKEN" -H "Accept: application/vnd.github.v3.raw" \
+     -s -L "https://api.github.com/repos/okta/strap/contents/$_srcfilename" \
+     --output "$HOME/.strap/okta/$_srcfilename"
+fi
+while read line; do ensure_loopback "$line"; done <"$_srcfile"
+logk
+
 STRAP_SUCCESS="1"
 log "Your system is now Strap'd!"
