@@ -359,7 +359,7 @@ ensure_brew_bash_profile "bash-completion" "etc/bash_completion"
 ensure_brew "openssl"
 
 logn "Checking Okta Root CA Cert in OS X keychain:"
-_STRAP_USER_DIR="$HOME/.strap"
+_STRAP_USER_DIR="$HOME/.strap/okta"
 mkdir -p "$_STRAP_USER_DIR"
 _STRAP_OKTA_ROOT_CA_CERT="$_STRAP_USER_DIR/Okta-Root-CA.pem"
 [ -f "$_STRAP_OKTA_ROOT_CA_CERT" ] || curl -sL http://ca.okta.com/Okta-Root-CA.pem -o "$_STRAP_OKTA_ROOT_CA_CERT"
@@ -717,6 +717,45 @@ ensure_cask "intellij-idea" "intellij-idea" "/Applications/IntelliJ IDEA.app"
 #   ~/Library/Application\ Support/IntelliJIdea$INTELLIJ_VERSION/gmavenplus-intellij-plugin.jar
 #logk
 
+mkdir -p "$HOME/okta"
+
+if [ ! -d "$HOME/okta/thirdparty" ]; then
+  pushd "$HOME/okta" >/dev/null
+  git clone git@github.com:okta/thirdparty.git
+  popd >/dev/null
+else
+  pushd "$HOME/okta/thirdparty" >/dev/null
+  if [ "$(git rev-parse --abbrev-ref HEAD)" == "master" ] && git diff-index --quiet HEAD >/dev/null; then
+    git pull
+  fi
+  popd >/dev/null
+fi
+
+ensure_strap_file() {
+  local path="$1" && [ -z "$path" ] && abort 'download_strap_file $1 must be a strap file path'
+  local token="$2" && [ -z "$token" ] && abort 'download_strap_file $2 must be a github authz token'
+  local dir="$HOME/.strap/okta"
+  local file="$dir/$path"
+
+  if [ ! -f "$file" ]; then
+    mkdir -p "$dir"
+    curl -H "Authorization: token $token" -H "Accept: application/vnd.github.v3.raw" \
+       -s -L "https://api.github.com/repos/okta/strap/contents/$path" --output "$file"
+  fi
+}
+
+logn "Checking okta_bash_profile in ~/.bash_profile:"
+ensure_strap_file "okta_bash_profile" "$_STRAP_GITHUB_API_TOKEN"
+if ! grep -q "okta_bash_profile" "$HOME/.bash_profile"; then
+  echo && log "Enabling okta_bash_profile in ~/.bash_profile"
+  echo '' >> "$HOME/.bash_profile"
+  echo "# strap:okta_bash_profile" >> "$HOME/.bash_profile"
+  echo "if [ -f \"\$HOME/.strap/okta/okta_bash_profile\" ]; then" >> "$HOME/.bash_profile"
+  echo "  . \"\$HOME/.strap/okta/okta_bash_profile\"" >> "$HOME/.bash_profile"
+  echo 'fi' >> "$HOME/.bash_profile"
+fi
+logk
+
 logn 'Checking /etc/hosts loopback aliases:'
 ensure_loopback() {
   local alias="$1" && [ -z "$1" ] && abort 'ensure_loopback: $1 must be an alias'
@@ -728,12 +767,7 @@ ensure_loopback() {
 }
 _srcfilename="loopback-aliases.txt"
 _srcfile="$HOME/.strap/okta/$_srcfilename"
-if [ ! -f "$_srcfile" ]; then
-  mkdir -p "$HOME/.strap/okta"
-  curl -H "Authorization: token $_STRAP_GITHUB_API_TOKEN" -H "Accept: application/vnd.github.v3.raw" \
-     -s -L "https://api.github.com/repos/okta/strap/contents/$_srcfilename" \
-     --output "$HOME/.strap/okta/$_srcfilename"
-fi
+ensure_strap_file "$_srcfilename" "$_STRAP_GITHUB_API_TOKEN"
 while read line; do ensure_loopback "$line"; done <"$_srcfile"
 logk
 
