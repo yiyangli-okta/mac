@@ -300,6 +300,13 @@ if ! brew tap | grep ^caskroom/cask$ >/dev/null 2>&1; then
 fi
 logk
 
+logn "Checking Homebrew Versions:"
+if ! brew tap | grep ^caskroom/versions$ >/dev/null 2>&1; then
+  echo && log "Tapping caskroom/versions..."
+  brew tap caskroom/versions
+fi
+logk
+
 logn "Checking Homebrew updates:"
 brew update
 brew upgrade
@@ -559,10 +566,14 @@ ensure_brew "percona-toolkit"
 ensure_brew "liquidprompt"
 ensure_brew_bash_profile "liquidprompt" "share/liquidprompt"
 ensure_cask "java"
+ensure_cask "java7"
 ensure_cask "jce-unlimited-strength-policy"
 
+_OLD_JENV_GLOBAL=""
 logn "Checking jenv:"
 if brew list | grep ^jenv$ >/dev/null 2>&1; then
+  eval "$(jenv init -)"
+  _OLD_JENV_GLOBAL="$(jenv global)"
   logk
 else
   echo
@@ -588,21 +599,77 @@ if ! grep -q jenv "$HOME/.bash_profile"; then
 fi
 logk
 
+if ! jenv versions --bare | grep -q "^1.8$"; then jenv add "$(/usr/libexec/java_home)"; fi
+if ! jenv versions --bare | grep -q "^1.7$"; then jenv add "$(/usr/libexec/java_home -v 1.7)"; fi
+
+ensure_java_cert() {
+  local cert="$1" && [ ! -f "$cert" ] && abort 'add_java_cert: $1 is not a file'
+  local alias="$2" && [ -z "$alias" ] && abort 'add_java_cert: $2 is required and must be a keystore alias name'
+  if ! sudo keytool -list -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "$alias" >/dev/null 2>&1; then
+    sudo keytool -import -trustcacerts -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "$alias" -file "$cert" >/dev/null 2>&1
+  fi
+  #sudo keytool -delete -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "$alias"
+}
+
 logn "Checking Okta Root CA Cert in Java Keystore:"
-if ! sudo keytool -list -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "oktaroot" >/dev/null 2>&1; then
-  sudo keytool -import -trustcacerts -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "oktaroot" -file "$_STRAP_OKTA_ROOT_CA_CERT" >/dev/null 2>&1
-fi
-#sudo keytool -delete -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "oktaroot"
+jenv global 1.8
+ensure_java_cert "$_STRAP_OKTA_ROOT_CA_CERT" 'oktaroot'
+jenv global 1.7
+ensure_java_cert "$_STRAP_OKTA_ROOT_CA_CERT" 'oktaroot'
+
 logk
 
 logn "Checking Okta Internet CA Cert in Java Keystore:"
 _STRAP_OKTA_NET_CA_CERT="$_STRAP_USER_DIR/Okta-Internet-CA.pem"
 [ -f "$_STRAP_OKTA_NET_CA_CERT" ] || curl -sL http://ca.okta.com/Okta-Internet-CA.pem -o "$_STRAP_OKTA_NET_CA_CERT"
-if ! sudo keytool -list -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "mavensrv" >/dev/null 2>&1; then
-  sudo keytool -import -trustcacerts -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "mavensrv" -file "$_STRAP_OKTA_NET_CA_CERT" >/dev/null 2>&1
-fi
-#sudo keytool -delete -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "mavensrv"
+jenv global 1.8
+ensure_java_cert "$_STRAP_OKTA_NET_CA_CERT" "mavensrv"
+jenv global 1.7
+ensure_java_cert "$_STRAP_OKTA_NET_CA_CERT" "mavensrv"
 logk
+
+logn "Checking java7 unlimited cryptography:"
+jenv global 1.7
+JCE_DIR="$JAVA_HOME/jre/lib/security"
+if [ -f "$JCE_DIR/local_policy.jar.orig" ]; then
+  logk
+else
+  echo
+  log "Installing java7 unlimited cryptography..."
+  pushd $JCE_DIR >/dev/null
+  # backup existing JVM files that we will replace just in case:
+  sudo mv local_policy.jar local_policy.jar.orig
+  sudo mv US_export_policy.jar US_export_policy.jar.orig
+  sudo curl -sLO 'http://download.oracle.com/otn-pub/java/jce/7/UnlimitedJCEPolicyJDK7.zip' -H 'Cookie: oraclelicense=accept-securebackup-cookie'
+  sudo unzip -q UnlimitedJCEPolicyJDK7.zip
+  sudo mv UnlimitedJCEPolicy/US_export_policy.jar .
+  sudo mv UnlimitedJCEPolicy/local_policy.jar .
+  sudo chown root:wheel US_export_policy.jar
+  sudo chown root:wheel local_policy.jar
+  # cleanup download file:
+  sudo rm -rf UnlimitedJCEPolicyJDK7.zip
+  sudo rm -rf UnlimitedJCEPolicy
+  popd >/dev/null
+  logk
+fi
+
+# restore original jenv global if there was one:
+[ ! -z "$_OLD_JENV_GLOBAL" ] && jenv global "$_OLD_JENV_GLOBAL"
+
+#if ! sudo keytool -list -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "oktaroot" >/dev/null 2>&1; then
+#  sudo keytool -import -trustcacerts -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "oktaroot" -file "$_STRAP_OKTA_ROOT_CA_CERT" >/dev/null 2>&1
+#fi
+##sudo keytool -delete -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "oktaroot"
+#logk
+#
+#logn "Checking Okta Internet CA Cert in Java Keystore:"
+#_STRAP_OKTA_NET_CA_CERT="$_STRAP_USER_DIR/Okta-Internet-CA.pem"
+#[ -f "$_STRAP_OKTA_NET_CA_CERT" ] || curl -sL http://ca.okta.com/Okta-Internet-CA.pem -o "$_STRAP_OKTA_NET_CA_CERT"
+#if ! sudo keytool -list -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "mavensrv" >/dev/null 2>&1; then
+#  sudo keytool -import -trustcacerts -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "mavensrv" -file "$_STRAP_OKTA_NET_CA_CERT" >/dev/null 2>&1
+#fi
+##sudo keytool -delete -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "mavensrv"
+#logk
 
 ensure_brew "maven"
 ensure_brew "groovy"
