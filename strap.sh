@@ -312,12 +312,9 @@ brew update
 brew upgrade
 
 ensure_formula() {
-  local command="$1"
-  local formula="$2"
-  local name="$3"
-  [ -z "$1" ] && abort "pkg_ensure: \$1 must be the command"
-  [ -z "$2" ] && abort "pkg_ensure: \$2 must be the formula id"
-  [ -z "$3" ] && name="$formula"
+  local command="$1" && [ -z "$command" ] && abort 'ensure_formula: $1 must be the command'
+  local formula="$2" && [ -z "$formula" ] && abort 'ensure_formula: $2 must be the formula id'
+  local name="$3" && [ -z "$3" ] && name="$formula"
 
   logn "Checking $name:"
   if ! ${command} list ${formula} >/dev/null 2>&1; then
@@ -328,11 +325,25 @@ ensure_formula() {
 }
 ensure_brew() { ensure_formula "brew" $1 $2; }
 ensure_cask() {
-  if [ ! -z "$3" ] && [ -d "$3" ]; then
-    logn "Checking $1:"
-    logk
+  local formula="$1" && [ -z "$formula" ] && abort 'ensure_cask: $1 must be the formula id'
+  local apppath="$2"
+
+  if [ ! -z "$apppath" ] && [ -d "$apppath" ]; then
+    # simulate checking message:
+    logn "Checking $formula:"
+    if ! brew cask list "$formula" >/dev/null 2>&1; then
+      logk
+      log
+      log "Note: $formula appears to have been manually installed to $apppath."
+      log "If you want strap or homebrew to manage $formula version upgrades"
+      log "automatically (recommended), you should manually uninstall $apppath"
+      log "and re-run strap or manually run 'brew cask install $formula'."
+      log
+    else
+      logk
+    fi
   else
-    ensure_formula "brew cask" $1 $2
+    ensure_formula "brew cask" "$formula"
   fi
 }
 ensure_brew_bash_profile() {
@@ -745,8 +756,8 @@ ensure_brew "docker-clean"
 # Docker End
 ######################################
 
-ensure_cask "iterm2" "iTerm2" "/Applications/iTerm.app"
-ensure_cask "intellij-idea" "intellij-idea" "/Applications/IntelliJ IDEA.app"
+ensure_cask "iterm2" "/Applications/iTerm.app"
+ensure_cask "intellij-idea" "/Applications/IntelliJ IDEA.app"
 # TODO: add gmavenplus plugin to intellij
 #echo
 #log "Installing GMavenPlus plugin for intellij-idea..."
