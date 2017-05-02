@@ -675,6 +675,45 @@ ensure_brew "maven"
 ensure_brew "groovy"
 ensure_brew "lhazlewood/tap/spin"
 
+ensure_brew "nvm"
+mkdir -p "$HOME/.nvm"
+logn "Checking nvm in ~/.bash_profile:"
+if ! grep -q "NVM_DIR" "$HOME/.bash_profile"; then
+  echo && log "Enabling nvm in ~/.bash_profile:"
+  echo '' >> "$HOME/.bash_profile"
+  echo "# strap:nvm" >> "$HOME/.bash_profile"
+  echo 'export NVM_DIR="$HOME/.nvm"' >> "$HOME/.bash_profile"
+  echo 'if [ -f "$(brew --prefix)/opt/nvm/nvm.sh" ]; then' >> "$HOME/.bash_profile"
+  echo ' . "$(brew --prefix)/opt/nvm/nvm.sh"' >> "$HOME/.bash_profile"
+  echo 'fi' >> "$HOME/.bash_profile"
+fi
+if ! command -v nvm >/dev/null; then
+  export NVM_DIR="$HOME/.nvm"
+  . "$(brew --prefix)/opt/nvm/nvm.sh"
+fi
+
+version="5.6.0"
+logn "Checking node $version:"
+if command -v nvm >/dev/null && ! nvm ls "$version" >/dev/null; then
+  nvm install "$version"
+fi
+logk
+
+version="3.9.6"
+logn "Checking npm $version:"
+if [ "$(npm --version)" != "$version" ]; then
+  npm install -g "npm@$version"
+fi
+logk
+
+ensure_brew 'yarn'
+
+logn "Checking grunt cli:"
+if ! command -v grunt >/dev/null; then npm install -g grunt-cli; fi
+logk
+
+ensure_brew 'phantomjs'
+
 ######################################
 # Docker Begin
 ######################################
@@ -717,8 +756,8 @@ ensure_cask "intellij-idea" "intellij-idea" "/Applications/IntelliJ IDEA.app"
 #   ~/Library/Application\ Support/IntelliJIdea$INTELLIJ_VERSION/gmavenplus-intellij-plugin.jar
 #logk
 
+logn "Checking Okta thirdparty tools:"
 mkdir -p "$HOME/okta"
-
 if [ ! -d "$HOME/okta/thirdparty" ]; then
   pushd "$HOME/okta" >/dev/null
   git clone git@github.com:okta/thirdparty.git
@@ -726,10 +765,11 @@ if [ ! -d "$HOME/okta/thirdparty" ]; then
 else
   pushd "$HOME/okta/thirdparty" >/dev/null
   if [ "$(git rev-parse --abbrev-ref HEAD)" == "master" ] && git diff-index --quiet HEAD >/dev/null; then
-    git pull
+    git pull >/dev/null
   fi
   popd >/dev/null
 fi
+logk
 
 ensure_strap_file() {
   local path="$1" && [ -z "$path" ] && abort 'download_strap_file $1 must be a strap file path'
