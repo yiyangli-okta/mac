@@ -697,6 +697,8 @@ if ! grep -q "NVM_DIR" "$HOME/.bash_profile"; then
   echo ' . "$(brew --prefix)/opt/nvm/nvm.sh"' >> "$HOME/.bash_profile"
   echo 'fi' >> "$HOME/.bash_profile"
 fi
+logk
+
 if ! command -v nvm >/dev/null; then
   export NVM_DIR="$HOME/.nvm"
   . "$(brew --prefix)/opt/nvm/nvm.sh"
@@ -705,36 +707,51 @@ fi
 version="5.6.0"
 logn "Checking node $version:"
 if command -v nvm >/dev/null && ! nvm ls "$version" >/dev/null; then
-  nvm install "$version"
+  echo && log "Installing node $version..."
+  nvm install "$version" >/dev/null
 fi
 logk
 
 version="3.9.6"
 logn "Checking npm $version:"
 if [ "$(npm --version)" != "$version" ]; then
-  npm install -g "npm@$version"
+  echo && log "Installing npm $vesion..."
+  npm install -g "npm@$version" >/dev/null
 fi
 logk
 
 logn "Checking Okta Root CA cert in npm:"
-if ! npm config list | grep "^cafile\ .*[oO]kta" >/dev/null; then
-  npm config set cafile="$_STRAP_OKTA_ROOT_CA_CERT"
+if ! npm config list | grep "^cafile\ .*[oO]kta" >/dev/null 2>&1; then
+  echo && log "Configuring npm config cafile..."
+  npm config set cafile="$_STRAP_OKTA_ROOT_CA_CERT" >/dev/null
 fi
 logk
 
 ensure_brew 'yarn'
 
-logn "Checking grunt cli:"
-if ! command -v grunt >/dev/null; then npm install -g grunt-cli; fi
+logn "Checking grunt:"
+if ! command -v grunt >/dev/null; then
+  echo && log "Installing grunt..."
+  npm install -g grunt-cli >/dev/null
+fi
 logk
 
 ensure_brew 'phantomjs'
+
+ensure_brew 'perl'
+ensure_brew 'cpanminus'
+logn "Checking perl cpan DBD::mysql module:"
+if ! perl -MDBD::mysql -e 1 >/dev/null 2>&1; then
+  echo && log "Installing perl cpan DBD::mysql module..."
+  cpanm DBD::mysql >/dev/null
+fi
+logk
 
 ######################################
 # Docker Begin
 ######################################
 
-# We *DO NOT* run 'Docker for Mac' on purpose.  Docker for Mac does not yet 
+# We *DO NOT* run 'Docker for Mac' on purpose.  Docker for Mac does not yet
 # support bridge networks on the host OS (Mac OS X) into the docker containers,
 # which means you can't run the product (or in IntelliJ) in Mac OS because
 # network connections from the host OS into the docker containers are not possible.
