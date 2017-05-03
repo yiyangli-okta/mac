@@ -863,6 +863,22 @@ file="$OKTA_HOME/override.properties"
 [ ! -f "$file" ] && githubdl 'okta/strap' 'override.properties' "$file"
 logk
 
+file="$OKTA_HOME/certs/tomcat-jmx-keystore.jks"
+logn "Checking $file:"
+if [ ! -f "$file" ]; then
+  mkdir -p "$OKTA_HOME/certs"
+  keytool -genkeypair -alias seleniumtest -keyalg RSA -validity 365 -keystore "$file" -storepass "$JMXKEYSTOREPASS" -keypass "$JMXKEYSTOREPASS" -dname "CN=Engineering Productivity, OU=Eng CI, O=Okta, L=San Francisco, S=CA, C=US"
+fi
+logk
+
+file="$OKTA_HOME/certs/tomcat-jmx-truststore.jks"
+logn "Checking $file:"
+if [ ! -f "$file" ]; then
+  mkdir -p "$OKTA_HOME/certs"
+  echo "yes" | keytool -v -noprompt -alias jmxTrustStore -import -file "$_STRAP_OKTA_ROOT_CA_CERT" -keystore "$file" --storepass "$JMXKEYSTOREPASS" >/dev/null 2>&1
+fi
+logk
+
 # make config/state a little more secure, just in case:
 chmod -R go-rwx "$HOME/.strap"
 
