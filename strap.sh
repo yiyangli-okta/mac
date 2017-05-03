@@ -127,15 +127,11 @@ logk()  { STRAP_STEP="";   echo "OK"; }
 ##
 readval() {
   local result=$1
-  local prompt=$2
+  local prompt="$2" && [ -z "$prompt" ] && prompt="Enter value" #default value
   local secure=$3
-  local confirm=$4
+  local confirm=$4 && [ -z "$confirm" ] && [ "$secure" = true ] && confirm=true
   local first
   local second
-
-  [ -z "$prompt" ] && prompt="Enter value"
-  # if they didn't specify confirmation and secure is true, default to confirm:
-  [ -z "$confirm" ] && [ "$secure" = true ] && confirm=true
 
   while [ -z "$first" ] || [ -z "$second" ] || [ "$first" != "$second" ]; do
       printf "$prompt: "
@@ -155,9 +151,7 @@ readval() {
 }
 
 _STRAP_MACOSX_VERSION="$(sw_vers -productVersion)"
-echo "$_STRAP_MACOSX_VERSION" | grep $Q -E "^10.(9|10|11|12)" || {
-  abort "Run Strap on Mac OS X 10.9/10/11/12."
-}
+echo "$_STRAP_MACOSX_VERSION" | grep $Q -E "^10.(9|10|11|12)" || { abort "Run Strap on Mac OS X 10.9/10/11/12."; }
 
 [ "$USER" = "root" ] && abort "Run Strap as yourself, not root."
 groups | grep $Q admin || abort "Add $USER to the admin group."
@@ -173,14 +167,8 @@ ps -p "$STRAP_SUDO_WAIT_PID" &>/dev/null
 logk
 
 logn "Checking ~/.bash_profile:"
-if [ -f "$HOME/.bash_profile" ]; then
-  logk
-else
-  echo
-  log "Creating ~/.bash_profile..."
-  touch ~/.bash_profile
-  logk
-fi
+[ ! -f "$HOME/.bash_profile" ] && echo && log "Creating ~/.bash_profile..." && touch "$HOME/.bash_profile"
+logk
 
 logn "Checking security settings:"
 defaults write com.apple.Safari com.apple.Safari.ContentPageGroupIdentifier.WebKit2JavaEnabled -bool false
@@ -198,11 +186,18 @@ logk
 
 logn "Checking keyboard and finder settings:"
 # speed up the keyboard.  Defaults are *slow* for developers:
-defaults write -g KeyRepeat -int 2;
-defaults write -g InitialKeyRepeat -int 14;
-defaults write com.apple.finder AppleShowAllFiles YES; # show hidden files
-defaults write NSGlobalDomain AppleShowAllExtensions -bool true; # show all file extensions
-killall Finder 2>/dev/null;
+restart_finder=false
+[ "$(defaults read -g KeyRepeat)" != '2' ] && defaults write -g KeyRepeat -int 2
+[ "$(defaults read -g InitialKeyRepeat)" != '14' ] && defaults write -g InitialKeyRepeat -int 14
+if [ "$(defaults read com.apple.finder AppleShowAllFiles)" != "YES" ]; then
+  defaults write com.apple.finder AppleShowAllFiles YES; # show hidden files
+  restart_finder=true
+fi
+if [ "$(defaults read NSGlobalDomain AppleShowAllExtensions)" != "1" ]; then
+  defaults write NSGlobalDomain AppleShowAllExtensions -bool true # show all file extensions
+  restart_finder=true
+fi
+[ $restart_finder = true ] && killall Finder 2>/dev/null
 logk
 
 # Check and enable full-disk encryption.
@@ -210,13 +205,11 @@ logn "Checking full-disk encryption status:"
 if fdesetup status | grep $Q -E "FileVault is (On|Off, but will be enabled after the next restart)."; then
   logk
 elif [ -n "$STRAP_INTERACTIVE" ]; then
-  echo
-  log "Enabling full-disk encryption on next reboot:"
+  echo && log "Enabling full-disk encryption on next reboot:"
   sudo fdesetup enable -user "$USER" | tee ~/Desktop/"FileVault Recovery Key.txt"
   logk
 else
-  echo
-  abort "Run 'sudo fdesetup enable -user \"$USER\"' to enable full-disk encryption."
+  echo && abort "Run 'sudo fdesetup enable -user \"$USER\"' to enable full-disk encryption."
 fi
 
 logn "Checking Xcode Developer Tools:"
@@ -240,10 +233,8 @@ if [ -z "$XCODE_DIR" ] || ! [ -f "$XCODE_DIR/usr/bin/git" ] || ! [ -f "/usr/incl
       abort "Run 'xcode-select --install' to install the Xcode Command Line Tools."
     fi
   fi
-  logk
-else
-  logk
 fi
+logk
 
 # Check if the Xcode license is agreed to and agree if not.
 xcode_license() {
@@ -261,23 +252,17 @@ xcode_license
 
 # Check and install any remaining software updates.
 logn "Checking Apple software updates:"
-if softwareupdate -l 2>&1 | grep $Q "No new software available."; then
-  logk
-else
-  echo
-  log "Installing Apple software updates.  This could take a while..."
+if ! softwareupdate -l 2>&1 | grep $Q "No new software available."; then
+  echo && log "Installing Apple software updates.  This could take a while..."
   sudo softwareupdate --install --all
   xcode_license
-  logk
 fi
+logk
 
 # Homebrew
 logn "Checking Homebrew:"
-if command -v brew >/dev/null 2>&1; then
-  logk
-else
-  echo
-  log "Installing Homebrew..."
+if ! command -v brew >/dev/null 2>&1; then
+  echo && log "Installing Homebrew..."
   #HOMEBREW_PREFIX="/usr/local"
   #[ -d "$HOMEBREW_PREFIX" ] || sudo mkdir -p "$HOMEBREW_PREFIX"
   #sudo chown -R "$(logname):admin" "$HOMEBREW_PREFIX"
@@ -289,9 +274,8 @@ else
     echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bash_profile;
     source "$HOME/.bash_profile"
   fi
-
-  logk
 fi
+logk
 
 logn "Checking Homebrew Cask:"
 if ! brew tap | grep ^caskroom/cask$ >/dev/null 2>&1; then
@@ -400,7 +384,7 @@ else
   # no token yet, we need to get one.  This requires a github password:
   [ -z "$STRAP_GITHUB_PASSWORD" ] && readval STRAP_GITHUB_PASSWORD "Enter (or cmd-v paste) your GitHub password" true
 
-  _STRAP_UTC_DATE=$(date -u +%FT%TZ)
+  _STRAP_UTC_DATE="$(date -u +%FT%TZ)"
 
   JSON=$(curl --silent --show-error \
       -u "$STRAP_GITHUB_USER:$STRAP_GITHUB_PASSWORD" \
@@ -481,7 +465,6 @@ mkdir -p $_STRAP_SSH_DIR
 chmod 700 $_STRAP_SSH_DIR
 
 _STRAP_SSH_CONFIG_FILE="$_STRAP_SSH_DIR/config"
-
 _STRAP_SSH_AUTHZ_KEYS="$_STRAP_SSH_DIR/authorized_keys"
 [ -f "$_STRAP_SSH_AUTHZ_KEYS" ] || touch "$_STRAP_SSH_AUTHZ_KEYS"
 chmod 600 "$_STRAP_SSH_AUTHZ_KEYS"
@@ -528,7 +511,6 @@ fi
 chmod 400 "$_STRAP_SSH_KEY"
 chmod 400 "$_STRAP_SSH_PUB_KEY"
 [ -f "$_STRAP_SSH_CONFIG_FILE" ] && chmod 600 "$_STRAP_SSH_CONFIG_FILE"
-
 logk
 #####################################
 # SSH End
@@ -550,14 +532,11 @@ if [ $_strap_created_ssh_key = true ]; then
          -d "{ \"title\": \"Okta Strap-generated RSA public key on $_NOW\", \"key\": \"$_STRAP_SSH_PUB_KEY_CONTENTS\" }" \
          https://api.github.com/user/keys) 2>/dev/null
 
-  [ "$_RESULT" -ne "201" ] && echo "Unable to upload Strap-generated RSA private key to GitHub" && exit 1;
+  [ "$_RESULT" -ne "201" ] && abort 'Unable to upload Strap-generated RSA private key to GitHub'
 fi
 
 # Add github to known hosts:
-if [ ! -f "$_STRAP_SSH_KNOWN_HOSTS" ]; then
-  touch "$_STRAP_SSH_KNOWN_HOSTS"
-fi
-
+[ ! -f "$_STRAP_SSH_KNOWN_HOSTS" ] && touch "$_STRAP_SSH_KNOWN_HOSTS"
 if ! grep "^github.com" "$_STRAP_SSH_KNOWN_HOSTS" >/dev/null 2>&1; then
   echo "$_STRAP_GITHUB_KNOWN_HOST" >> "$_STRAP_SSH_KNOWN_HOSTS"
 fi
@@ -584,7 +563,6 @@ logn "Checking jenv:"
 if brew list | grep ^jenv$ >/dev/null 2>&1; then
   eval "$(jenv init -)"
   _OLD_JENV_GLOBAL="$(jenv global)"
-  logk
 else
   echo
   log "Installing jenv..."
@@ -597,8 +575,9 @@ else
   jenv enable-plugin maven
   jenv enable-plugin groovy
   jenv enable-plugin springboot
-  logk
 fi
+logk
+
 logn "Checking jenv in ~/.bash_profile:"
 if ! grep -q jenv "$HOME/.bash_profile"; then
   echo && log "Enabling jenv in ~/.bash_profile..."
@@ -626,7 +605,6 @@ jenv global 1.8
 ensure_java_cert "$_STRAP_OKTA_ROOT_CA_CERT" 'oktaroot'
 jenv global 1.7
 ensure_java_cert "$_STRAP_OKTA_ROOT_CA_CERT" 'oktaroot'
-
 logk
 
 logn "Checking Okta Internet CA Cert in Java Keystore:"
@@ -665,21 +643,6 @@ fi
 
 # restore original jenv global if there was one:
 [ ! -z "$_OLD_JENV_GLOBAL" ] && jenv global "$_OLD_JENV_GLOBAL"
-
-#if ! sudo keytool -list -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "oktaroot" >/dev/null 2>&1; then
-#  sudo keytool -import -trustcacerts -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "oktaroot" -file "$_STRAP_OKTA_ROOT_CA_CERT" >/dev/null 2>&1
-#fi
-##sudo keytool -delete -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "oktaroot"
-#logk
-#
-#logn "Checking Okta Internet CA Cert in Java Keystore:"
-#_STRAP_OKTA_NET_CA_CERT="$_STRAP_USER_DIR/Okta-Internet-CA.pem"
-#[ -f "$_STRAP_OKTA_NET_CA_CERT" ] || curl -sL http://ca.okta.com/Okta-Internet-CA.pem -o "$_STRAP_OKTA_NET_CA_CERT"
-#if ! sudo keytool -list -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "mavensrv" >/dev/null 2>&1; then
-#  sudo keytool -import -trustcacerts -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "mavensrv" -file "$_STRAP_OKTA_NET_CA_CERT" >/dev/null 2>&1
-#fi
-##sudo keytool -delete -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "mavensrv"
-#logk
 
 ensure_brew "maven"
 ensure_brew "groovy"
@@ -750,7 +713,7 @@ logk
 ######################################
 # Docker Begin
 ######################################
-
+#
 # We *DO NOT* run 'Docker for Mac' on purpose.  Docker for Mac does not yet
 # support bridge networks on the host OS (Mac OS X) into the docker containers,
 # which means you can't run the product (or in IntelliJ) in Mac OS because
