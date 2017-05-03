@@ -716,6 +716,12 @@ if [ "$(npm --version)" != "$version" ]; then
 fi
 logk
 
+logn "Checking Okta Root CA cert in npm:"
+if ! npm config list | grep "^cafile\ .*[oO]kta" >/dev/null; then
+  npm config set cafile="$_STRAP_OKTA_ROOT_CA_CERT"
+fi
+logk
+
 ensure_brew 'yarn'
 
 logn "Checking grunt cli:"
