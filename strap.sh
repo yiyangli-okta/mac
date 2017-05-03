@@ -72,7 +72,7 @@ fi
 STDIN_FILE_DESCRIPTOR="0"
 [ -t "$STDIN_FILE_DESCRIPTOR" ] && STRAP_INTERACTIVE="1"
 
-STRAP_GIT_NAME=
+STRAP_GIT_NAME="$(id -F)"
 STRAP_GIT_EMAIL=
 STRAP_GITHUB_USER=
 STRAP_GITHUB_TOKEN=
@@ -412,12 +412,11 @@ else
   _STRAP_GITHUB_API_TOKEN_URL=$(echo "$JSON" | jq -er '.url')
 
   if [ -z "$_STRAP_GITHUB_API_TOKEN" ] || [ "$_STRAP_GITHUB_API_TOKEN" == "null" ]; then
-      echo "Unable to create GitHub API personal access token"
-      exit 1
+      abort 'Unable to create GitHub API personal access token'
   fi
 
   # save to mac os x keychain for secure storage:
-  security add-internet-password -r htps -s api.github.com -l "$_STRAP_KEYCHAIN_ENTRY_LABEL" -j "$_STRAP_GITHUB_API_TOKEN_URL" -t http -a "$STRAP_GITHUB_USER" -w "$_STRAP_GITHUB_API_TOKEN" || { echo "Unable to save GitHub API personal access token to Mac OS X Keychain"; exit 1; }
+  security add-internet-password -r htps -s api.github.com -l "$_STRAP_KEYCHAIN_ENTRY_LABEL" -j "$_STRAP_GITHUB_API_TOKEN_URL" -t http -a "$STRAP_GITHUB_USER" -w "$_STRAP_GITHUB_API_TOKEN" || { abort "Unable to save GitHub API personal access token to Mac OS X Keychain";}
 fi
 
 if git config --global user.email >/dev/null; then
@@ -783,20 +782,21 @@ fi
 logk
 
 ensure_strap_file() {
-  local path="$1" && [ -z "$path" ] && abort 'download_strap_file $1 must be a strap file path'
-  local token="$2" && [ -z "$token" ] && abort 'download_strap_file $2 must be a github authz token'
-  local dir="$HOME/.strap/okta"
-  local file="$dir/$path"
+  local path="$1" && [ -z "$path" ] && abort 'ensure_strap_file: $1 must be a strap file path'
+  local dstdir="$2" && [ -z "$dstdir" ] && dstdir="$_STRAP_USER_DIR" #default
+  local file="$dstdir/$path"
+  local filedir="${file%/*}"
 
   if [ ! -f "$file" ]; then
-    mkdir -p "$dir"
-    curl -H "Authorization: token $token" -H "Accept: application/vnd.github.v3.raw" \
+    mkdir -p "$filedir"
+    curl -H "Authorization: token $_STRAP_GITHUB_API_TOKEN" -H "Accept: application/vnd.github.v3.raw" \
        -s -L "https://api.github.com/repos/okta/strap/contents/$path" --output "$file"
   fi
+  chmod go-rwx "$file"
 }
 
 logn "Checking okta_bash_profile in ~/.bash_profile:"
-ensure_strap_file "okta_bash_profile" "$_STRAP_GITHUB_API_TOKEN"
+ensure_strap_file "okta_bash_profile"
 if ! grep -q "okta_bash_profile" "$HOME/.bash_profile"; then
   echo && log "Enabling okta_bash_profile in ~/.bash_profile"
   echo '' >> "$HOME/.bash_profile"
@@ -805,6 +805,45 @@ if ! grep -q "okta_bash_profile" "$HOME/.bash_profile"; then
   echo "  . \"\$HOME/.strap/okta/okta_bash_profile\"" >> "$HOME/.bash_profile"
   echo 'fi' >> "$HOME/.bash_profile"
 fi
+logk
+
+ensure_cask 'tunnelblick' '/Applications/Tunnelblick.app'
+
+logn "Checking tunnelblick config files:"
+# we don't want to use $_STRAP_USER_DIR to store client.key or client.crt;
+# if the user deletes ~/.strap (thinking they're 'cleaning up'), we don't want
+# them to lose the ITSON-issued client.crt file (whereby their VPN would stop working),
+# so we keep these files in a separate directory that holds tunnelblick-only config:
+_dstdir="$HOME/.tunnelblick/okta"
+_path='okta-vpc.tblk/client.down' && ensure_strap_file "$_path" "$_dstdir" && chmod u+x "$_dstdir/$_path"
+_path='okta-vpc.tblk/client.up' && ensure_strap_file "$_path" "$_dstdir" && chmod u+x "$_dstdir/$_path"
+ensure_strap_file 'okta-vpc.tblk/okta-vpc-dev.ovpn' "$_dstdir"
+ensure_strap_file 'okta-vpc.tblk/okta_internal_ca.crt' "$_dstdir"
+_path='okta-vpc.tblk/client.key'
+_src="$HOME/$_path"
+_dst="$_dstdir/$_path"
+_filedir="${_dst%/*}"
+if [ ! -f "$_dst" ]; then
+  mkdir -p "$_filedir"
+  if [ -f "$_src" ]; then
+    cp "$_src" "$_dst" >/dev/null
+  else
+    _STRAP_UTC_DATE="$(date -u +%FT%TZ)"
+    export _STRAP_CLIENT_KEY_PASS="$(openssl rand 48 -base64)"
+    openssl genrsa -aes256 -passout env:_STRAP_CLIENT_KEY_PASS -out "$_dst" 2048 >/dev/null 2>&1 && chmod 400 "$_dst" >/dev/null
+    openssl req -batch -sha256 -new -subj "/C=US/O=Okta, Inc./OU=Engineering/CN=$STRAP_GIT_NAME" -days 1825 -key "$_dst" -passin env:_STRAP_CLIENT_KEY_PASS -out "$_filedir/client.csr"
+    if ! security find-generic-password -a "$USER" -s 'okta-strap-tunnelblick-dev-vpc' >/dev/null 2>&1; then
+      security add-generic-password -a "$USER" -s 'okta-strap-tunnelblick-dev-vpc' -l "Okta Strap Tunnelblick client.key passphrase" -j "Okta strap-generated passphrase for $_dst on $_STRAP_UTC_DATE" -w "$_STRAP_CLIENT_KEY_PASS"
+    fi
+    # security delete-generic-password -a "$USER" -s 'okta-vpc'
+    unset _STRAP_CLIENT_KEY_PASS
+  fi
+fi
+_path='okta-vpc.tblk/client.crt'
+_src="$HOME/$_path"
+_dst="$_dstdir/$_path"
+if [ ! -f "$_dst" ] && [ -f "$_src" ]; then cp "$_src" "$_dst" >/dev/null; fi
+chmod -R go-rwx "$HOME/.tunnelblick"
 logk
 
 logn 'Checking /etc/hosts loopback aliases:'
@@ -818,9 +857,12 @@ ensure_loopback() {
 }
 _srcfilename="loopback-aliases.txt"
 _srcfile="$HOME/.strap/okta/$_srcfilename"
-ensure_strap_file "$_srcfilename" "$_STRAP_GITHUB_API_TOKEN"
+ensure_strap_file "$_srcfilename"
 while read line; do ensure_loopback "$line"; done <"$_srcfile"
 logk
+
+# make config/state a little more secure, just in case:
+chmod -R go-rwx "$HOME/.strap"
 
 STRAP_SUCCESS="1"
 log "Your system is now Strap'd!"
