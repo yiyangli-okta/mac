@@ -767,31 +767,24 @@ else
 fi
 logk
 
+githubdl() {
+  local repo="$1" && [ -z "$repo" ] && abort 'githubdl: $1 must be a qualified repo, e.g. user/reponame'
+  local path="$2" && [ -z "$path" ] && abort 'githubdl: $2 must be the repo file path, e.g. file.txt or my/other/file.txt'
+  local file="$3" && [ -z "$file" ] && abort 'githubdl: $3 must be the destination file'
+  local filedir="${file%/*}"
+  mkdir -p "$filedir"
+  curl -H "Authorization: token $_STRAP_GITHUB_API_TOKEN" \
+       -H "Accept: application/vnd.github.v3.raw" \
+       -s -L "https://api.github.com/repos/$repo/contents/$path" --output "$file"
+}
+
 ensure_strap_file() {
   local path="$1" && [ -z "$path" ] && abort 'ensure_strap_file: $1 must be a strap file path'
   local dstdir="$2" && [ -z "$dstdir" ] && dstdir="$_STRAP_USER_DIR" #default
   local file="$dstdir/$path"
-  local filedir="${file%/*}"
-
-  if [ ! -f "$file" ]; then
-    mkdir -p "$filedir"
-    curl -H "Authorization: token $_STRAP_GITHUB_API_TOKEN" -H "Accept: application/vnd.github.v3.raw" \
-       -s -L "https://api.github.com/repos/okta/strap/contents/$path" --output "$file"
-  fi
+  [ ! -f "$file" ] && githubdl 'okta/strap' "$path" "$file"
   chmod go-rwx "$file"
 }
-
-logn "Checking okta_bash_profile in ~/.bash_profile:"
-ensure_strap_file "okta_bash_profile"
-if ! grep -q "okta_bash_profile" "$HOME/.bash_profile"; then
-  echo && log "Enabling okta_bash_profile in ~/.bash_profile"
-  echo '' >> "$HOME/.bash_profile"
-  echo "# strap:okta_bash_profile" >> "$HOME/.bash_profile"
-  echo "if [ -f \"\$HOME/.strap/okta/okta_bash_profile\" ]; then" >> "$HOME/.bash_profile"
-  echo "  . \"\$HOME/.strap/okta/okta_bash_profile\"" >> "$HOME/.bash_profile"
-  echo 'fi' >> "$HOME/.bash_profile"
-fi
-logk
 
 ensure_cask 'tunnelblick' '/Applications/Tunnelblick.app'
 
@@ -845,6 +838,29 @@ _srcfilename="loopback-aliases.txt"
 _srcfile="$HOME/.strap/okta/$_srcfilename"
 ensure_strap_file "$_srcfilename"
 while read line; do ensure_loopback "$line"; done <"$_srcfile"
+logk
+
+logn "Checking okta_bash_profile in ~/.bash_profile:"
+ensure_strap_file "okta_bash_profile"
+if ! grep -q "okta_bash_profile" "$HOME/.bash_profile"; then
+  echo && log "Enabling okta_bash_profile in ~/.bash_profile"
+  echo '' >> "$HOME/.bash_profile"
+  echo "# strap:okta_bash_profile" >> "$HOME/.bash_profile"
+  echo "if [ -f \"\$HOME/.strap/okta/okta_bash_profile\" ]; then" >> "$HOME/.bash_profile"
+  echo "  . \"\$HOME/.strap/okta/okta_bash_profile\"" >> "$HOME/.bash_profile"
+  echo 'fi' >> "$HOME/.bash_profile"
+fi
+. "$HOME/.strap/okta/okta_bash_profile"
+logk
+
+logn 'Checking $TOMCAT_HOME/shared/classes/env.properties:'
+file="$TOMCAT_HOME/shared/classes/env.properties"
+[ ! -f "$file" ] && githubdl 'okta/okta-core' 'anchorcrown/okta-tomcat/env.properties' "$file"
+logk
+
+logn 'Checking ~/okta/override.properties:'
+file="$OKTA_HOME/override.properties"
+[ ! -f "$file" ] && githubdl 'okta/strap' 'override.properties' "$file"
 logk
 
 # make config/state a little more secure, just in case:
