@@ -375,30 +375,51 @@ fi
 
 _STRAP_KEYCHAIN_ENTRY_LABEL="Okta Strap GitHub API personal access token"
 _STRAP_GITHUB_API_TOKEN="${STRAP_GITHUB_TOKEN}"
+_STRAP_GITHUB_TOKEN_COMMENT='User-supplied GitHub personal access token'
+_store_github_token=false
 
-if security find-internet-password -a "$STRAP_GITHUB_USER" -s api.github.com -l "$_STRAP_KEYCHAIN_ENTRY_LABEL" >/dev/null 2>&1; then
+if [ ! -z "$_STRAP_GITHUB_API_TOKEN" ]; then # user specified a token - let's check to see if it is valid:
+  _http_code="$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: token $_STRAP_GITHUB_API_TOKEN" https://api.github.com)"
+  [[ "$_http_code" == "4*" ]] && abort 'Specified STRAP_GITHUB_TOKEN is invalid. GitHub authentication failed.'
+  _STRAP_GITHUB_TOKEN_COMMENT='User-supplied GitHub personal access token'
+  _store_github_token=true
+elif security find-internet-password -a "$STRAP_GITHUB_USER" -s api.github.com -l "$_STRAP_KEYCHAIN_ENTRY_LABEL" >/dev/null 2>&1; then
   _STRAP_GITHUB_API_TOKEN=$(security find-internet-password -a "$STRAP_GITHUB_USER" -s api.github.com -l "$_STRAP_KEYCHAIN_ENTRY_LABEL" -w)
+  _store_github_token=false # it is already stored
 else
+  STRAP_GITHUB_PASSWORD=
   # no token yet, we need to get one.  This requires a github password:
   [ -z "$STRAP_GITHUB_PASSWORD" ] && readval STRAP_GITHUB_PASSWORD "Enter (or cmd-v paste) your GitHub password" true
 
   _STRAP_UTC_DATE="$(date -u +%FT%TZ)"
+  _request_body="{\"scopes\":[\"repo\",\"admin:org\",\"admin:public_key\",\"admin:repo_hook\",\"admin:org_hook\",\"gist\",\"notifications\",\"user\",\"delete_repo\",\"admin:gpg_key\"],\"note\":\"Okta Strap-generated token, created at $_STRAP_UTC_DATE\"}"
+  _creds="$STRAP_GITHUB_USER:$STRAP_GITHUB_PASSWORD"
+  _response=$(curl --silent --show-error -i -u "$_creds" -H "Content-Type: application/json" -X POST -d "$_request_body" https://api.github.com/authorizations)
+  _status=$(echo "$_response" | grep 'HTTP/1.1' | awk '{print $2}')
+  _otp_type=$(echo "$_response" | grep 'X-GitHub-OTP:' | awk '{print $3}')
+  _response_body=$(echo "$_response" | sed '1,/^\r\{0,1\}$/d')
 
-  JSON=$(curl --silent --show-error \
-      -u "$STRAP_GITHUB_USER:$STRAP_GITHUB_PASSWORD" \
-      -H "Content-Type: application/json" -X POST -d \
-      "{\"scopes\":[\"repo\",\"admin:org\",\"admin:public_key\",\"admin:repo_hook\",\"admin:org_hook\",\"gist\",\"notifications\",\"user\",\"delete_repo\",\"admin:gpg_key\"],\"note\":\"Okta Strap-generated token, created at $_STRAP_UTC_DATE\"}" \
-      https://api.github.com/authorizations)
+  if [ ! -z "$_otp_type" ]; then #2factor required - ask for code:
+    _strap_github_otp=
+    readval _strap_github_otp "Enter GitHub two-factor code"
 
-  _STRAP_GITHUB_API_TOKEN=$(echo "$JSON" | jq -er '.token')
-  _STRAP_GITHUB_API_TOKEN_URL=$(echo "$JSON" | jq -er '.url')
+    #try again, this time with the OTP code
+    _response_body=$(curl --silent --show-error -u "$_creds" -H "X-GitHub-OTP: $_strap_github_otp" -H "Content-Type: application/json" -X POST -d "$_request_body" https://api.github.com/authorizations)
+    #_status=$(echo "$_response" | grep 'HTTP/1.1' | awk '{print $2}')
+    #_otp_type=$(echo "$_response" | grep 'X-GitHub-OTP:' | awk '{print $3}')
+    #_response_body=$(echo "$_response" | sed '1,/^\r\{0,1\}$/d')
+  fi
+
+  _STRAP_GITHUB_API_TOKEN=$(echo "$_response_body" | jq -er '.token')
+  _STRAP_GITHUB_TOKEN_COMMENT=$(echo "$_response_body" | jq -er '.url') # use the token url as the comment in this case
+  _store_github_token=true
 
   if [ -z "$_STRAP_GITHUB_API_TOKEN" ] || [ "$_STRAP_GITHUB_API_TOKEN" == "null" ]; then
       abort 'Unable to create GitHub API personal access token'
   fi
-
-  # save to mac os x keychain for secure storage:
-  security add-internet-password -r htps -s api.github.com -l "$_STRAP_KEYCHAIN_ENTRY_LABEL" -j "$_STRAP_GITHUB_API_TOKEN_URL" -t http -a "$STRAP_GITHUB_USER" -w "$_STRAP_GITHUB_API_TOKEN" || { abort "Unable to save GitHub API personal access token to Mac OS X Keychain";}
+fi
+if [ $_store_github_token = true ]; then
+  security add-internet-password -r htps -s api.github.com -l "$_STRAP_KEYCHAIN_ENTRY_LABEL" -j "$_STRAP_GITHUB_TOKEN_COMMENT" -t http -a "$STRAP_GITHUB_USER" -w "$_STRAP_GITHUB_API_TOKEN" || { abort "Unable to save GitHub API personal access token to Mac OS X Keychain";}
 fi
 
 if git config --global user.email >/dev/null; then
@@ -407,9 +428,7 @@ else
   if [ -z "$STRAP_GIT_EMAIL" ]; then
 
     #try to find it from the GitHub account:
-    JSON=$(curl --silent --show-error \
-      -u "$STRAP_GITHUB_USER:$_STRAP_GITHUB_API_TOKEN" \
-      https://api.github.com/user/emails)
+    JSON=$(curl --silent --show-error -u "$STRAP_GITHUB_USER:$_STRAP_GITHUB_API_TOKEN" https://api.github.com/user/emails)
 
     STRAP_GIT_EMAIL=$(echo "$JSON" | jq -er '.[] | select(.primary == true) | .email')
 
