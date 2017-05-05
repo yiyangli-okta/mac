@@ -187,8 +187,8 @@ logk
 logn "Checking keyboard and finder settings:"
 # speed up the keyboard.  Defaults are *slow* for developers:
 restart_finder=false
-[ "$(defaults read -g KeyRepeat)" != '2' ] && defaults write -g KeyRepeat -int 2
-[ "$(defaults read -g InitialKeyRepeat)" != '14' ] && defaults write -g InitialKeyRepeat -int 14
+defaults write -g KeyRepeat -int 2
+defaults write -g InitialKeyRepeat -int 14
 if [ "$(defaults read com.apple.finder AppleShowAllFiles)" != "YES" ]; then
   defaults write com.apple.finder AppleShowAllFiles YES; # show hidden files
   restart_finder=true
@@ -263,9 +263,6 @@ logk
 logn "Checking Homebrew:"
 if ! command -v brew >/dev/null 2>&1; then
   echo && log "Installing Homebrew..."
-  #HOMEBREW_PREFIX="/usr/local"
-  #[ -d "$HOMEBREW_PREFIX" ] || sudo mkdir -p "$HOMEBREW_PREFIX"
-  #sudo chown -R "$(logname):admin" "$HOMEBREW_PREFIX"
   yes '' | /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)";
 
   if [[ "$PATH" != *"/usr/local/bin"* ]]; then
@@ -294,6 +291,7 @@ logk
 logn "Checking Homebrew updates:"
 brew update
 brew upgrade
+logk
 
 ensure_formula() {
   local command="$1" && [ -z "$command" ] && abort 'ensure_formula: $1 must be the command'
@@ -853,14 +851,9 @@ fi
 . "$HOME/.strap/okta/okta_bash_profile"
 logk
 
-logn 'Checking $TOMCAT_HOME/shared/classes/env.properties:'
-file="$TOMCAT_HOME/shared/classes/env.properties"
-[ ! -f "$file" ] && githubdl 'okta/okta-core' 'anchorcrown/okta-tomcat/env.properties' "$file"
-logk
-
 logn 'Checking ~/okta/override.properties:'
 file="$OKTA_HOME/override.properties"
-[ ! -f "$file" ] && githubdl 'okta/strap' 'override.properties' "$file"
+[ ! -f "$file" ] && echo 'default.services.host=192.168.99.100' > "$file"
 logk
 
 file="$OKTA_HOME/certs/tomcat-jmx-keystore.jks"
