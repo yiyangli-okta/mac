@@ -374,7 +374,7 @@ else
 fi
 
 _STRAP_KEYCHAIN_ENTRY_LABEL="Okta Strap GitHub API personal access token"
-_STRAP_GITHUB_API_TOKEN=
+_STRAP_GITHUB_API_TOKEN="${STRAP_GITHUB_TOKEN}"
 
 if security find-internet-password -a "$STRAP_GITHUB_USER" -s api.github.com -l "$_STRAP_KEYCHAIN_ENTRY_LABEL" >/dev/null 2>&1; then
   _STRAP_GITHUB_API_TOKEN=$(security find-internet-password -a "$STRAP_GITHUB_USER" -s api.github.com -l "$_STRAP_KEYCHAIN_ENTRY_LABEL" -w)
@@ -854,6 +854,11 @@ logk
 logn 'Checking ~/okta/override.properties:'
 file="$OKTA_HOME/override.properties"
 [ ! -f "$file" ] && echo 'default.services.host=192.168.99.100' > "$file"
+logk
+
+logn 'Checking ~/okta/spin.groovy:'
+file="$OKTA_HOME/spin.groovy"
+[ ! -f "$file" ] && githubdl 'okta/strap' 'spin.groovy' "$file"
 logk
 
 file="$OKTA_HOME/certs/tomcat-jmx-keystore.jks"
