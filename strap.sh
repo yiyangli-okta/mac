@@ -611,6 +611,7 @@ if ! jenv versions --bare | grep -q "^1.7$"; then jenv add "$(/usr/libexec/java_
 ensure_java_cert() {
   local cert="$1" && [ ! -f "$cert" ] && abort 'add_java_cert: $1 is not a file'
   local alias="$2" && [ -z "$alias" ] && abort 'add_java_cert: $2 is required and must be a keystore alias name'
+  JAVA_HOME="$(jenv javahome)"
   if ! sudo keytool -list -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "$alias" >/dev/null 2>&1; then
     sudo keytool -import -trustcacerts -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "$alias" -file "$cert" >/dev/null 2>&1
   fi
@@ -635,6 +636,7 @@ logk
 
 logn "Checking java7 unlimited cryptography:"
 jenv global 1.7
+JAVA_HOME="$(jenv javahome)"
 JCE_DIR="$JAVA_HOME/jre/lib/security"
 if [ -f "$JCE_DIR/local_policy.jar.orig" ]; then
   logk
