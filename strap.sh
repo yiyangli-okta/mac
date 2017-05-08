@@ -665,59 +665,6 @@ ensure_brew "maven"
 ensure_brew "groovy"
 ensure_brew "lhazlewood/tap/spin"
 
-ensure_brew "nvm"
-mkdir -p "$HOME/.nvm"
-logn "Checking nvm in ~/.bash_profile:"
-if ! grep -q "NVM_DIR" "$HOME/.bash_profile"; then
-  echo && log "Enabling nvm in ~/.bash_profile:"
-  echo '' >> "$HOME/.bash_profile"
-  echo "# strap:nvm" >> "$HOME/.bash_profile"
-  echo 'export NVM_DIR="$HOME/.nvm"' >> "$HOME/.bash_profile"
-  echo 'if [ -f "$(brew --prefix)/opt/nvm/nvm.sh" ]; then' >> "$HOME/.bash_profile"
-  echo ' . "$(brew --prefix)/opt/nvm/nvm.sh"' >> "$HOME/.bash_profile"
-  echo 'fi' >> "$HOME/.bash_profile"
-fi
-logk
-
-if ! command -v nvm >/dev/null; then
-  export NVM_DIR="$HOME/.nvm"
-  . "$(brew --prefix)/opt/nvm/nvm.sh"
-fi
-
-version="5.6.0"
-logn "Checking node $version:"
-if command -v nvm >/dev/null && ! nvm ls "$version" >/dev/null; then
-  echo && log "Installing node $version..."
-  nvm install "$version" >/dev/null
-fi
-logk
-
-version="3.9.6"
-logn "Checking npm $version:"
-if [ "$(npm --version)" != "$version" ]; then
-  echo && log "Installing npm $vesion..."
-  npm install -g "npm@$version" >/dev/null
-fi
-logk
-
-logn "Checking Okta Root CA cert in npm:"
-if ! npm config list | grep "^cafile\ .*[oO]kta" >/dev/null 2>&1; then
-  echo && log "Configuring npm config cafile..."
-  npm config set cafile="$_STRAP_OKTA_ROOT_CA_CERT" >/dev/null
-fi
-logk
-
-ensure_brew 'yarn'
-
-logn "Checking grunt:"
-if ! command -v grunt >/dev/null; then
-  echo && log "Installing grunt..."
-  npm install -g grunt-cli >/dev/null
-fi
-logk
-
-ensure_brew 'phantomjs'
-
 ensure_brew 'perl'
 ensure_brew 'cpanminus'
 logn "Checking perl cpan DBD::mysql module:"
@@ -754,6 +701,18 @@ ensure_brew "docker"
 ensure_brew "docker-machine"
 ensure_brew "docker-compose"
 ensure_brew "docker-clean"
+
+# We name our docker vm 'dev', so ensure this is in bash profile:
+logn "Checking 'dev' docker-machine in ~/.bash_profile:"
+if ! grep -q 'docker-machine env dev' "$HOME/.bash_profile"; then
+  echo && log "Enabling dev docker-machine check in ~/.bash_profile"
+  echo ''  >> "$HOME/.bash_profile"
+  echo '# strap:docker-machine:dev'  >> "$HOME/.bash_profile"
+  echo 'if command -v docker-machine >/dev/null && [ "$(docker-machine status dev 2> /dev/null)" == "Running" ]; then'  >> "$HOME/.bash_profile"
+  echo '  eval "$(docker-machine env dev)"' >> "$HOME/.bash_profile"
+  echo 'fi'  >> "$HOME/.bash_profile"
+fi
+logk
 ######################################
 # Docker End
 ######################################
@@ -856,6 +815,58 @@ _srcfile="$HOME/.strap/okta/$_srcfilename"
 ensure_strap_file "$_srcfilename"
 while read line; do ensure_loopback "$line"; done <"$_srcfile"
 logk
+
+ensure_brew "nvm"
+mkdir -p "$HOME/.nvm"
+logn "Checking nvm in ~/.bash_profile:"
+if ! grep -q "NVM_DIR" "$HOME/.bash_profile"; then
+  echo && log "Enabling nvm in ~/.bash_profile:"
+  echo '' >> "$HOME/.bash_profile"
+  echo "# strap:nvm" >> "$HOME/.bash_profile"
+  echo 'export NVM_DIR="$HOME/.nvm"' >> "$HOME/.bash_profile"
+  echo 'if [ -f "$(brew --prefix)/opt/nvm/nvm.sh" ]; then' >> "$HOME/.bash_profile"
+  echo ' . "$(brew --prefix)/opt/nvm/nvm.sh"' >> "$HOME/.bash_profile"
+  echo 'fi' >> "$HOME/.bash_profile"
+fi
+logk
+
+if ! command -v nvm >/dev/null; then
+  export NVM_DIR="$HOME/.nvm"
+  . "$(brew --prefix)/opt/nvm/nvm.sh"
+fi
+
+version="5.6.0"
+logn "Checking node $version:"
+if command -v nvm >/dev/null && ! nvm ls "$version" >/dev/null; then
+  echo && log "Installing node $version..."
+  nvm install "$version" >/dev/null
+fi
+logk
+
+version="3.9.6"
+logn "Checking npm $version:"
+if [ "$(npm --version)" != "$version" ]; then
+  echo && log "Installing npm $vesion..."
+  npm install -g "npm@$version" >/dev/null
+fi
+logk
+
+logn "Checking .npmrc:"
+file="$HOME/.npmrc"
+[ ! -f "$file" ] && githubdl 'okta/strap' '.npmrc' "$file"
+if ! grep -q "^cafile" "$file"; then echo "cafile=$_STRAP_OKTA_ROOT_CA_CERT" >> "$file"; fi
+logk
+
+ensure_brew 'yarn'
+
+logn "Checking grunt:"
+if ! command -v grunt >/dev/null; then
+  echo && log "Installing grunt..."
+  npm install -g grunt-cli >/dev/null
+fi
+logk
+
+ensure_brew 'phantomjs'
 
 logn "Checking okta_bash_profile in ~/.bash_profile:"
 ensure_strap_file "okta_bash_profile"
