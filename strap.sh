@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 #
 # Copyright (C) 2017 Okta, Inc.
 #
@@ -18,9 +20,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-
-#!/usr/bin/env bash
-
+#
 # This script is initially based on Mike McQuaid's strap project, with additions:
 # https://github.com/MikeMcQuaid/strap
 
