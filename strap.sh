@@ -853,22 +853,23 @@ if [ "$(npm --version)" != "$version" ]; then
 fi
 logk
 
+logn "Checking grunt:"
+if ! command -v grunt >/dev/null; then
+  echo && log "Installing grunt..."
+  npm config set strict-ssl false
+  npm install -g grunt-cli >/dev/null
+  npm config delete strict-ssl
+fi
+logk
+
+ensure_brew 'yarn'
+ensure_brew 'phantomjs'
+
 logn "Checking .npmrc:"
 file="$HOME/.npmrc"
 [ ! -f "$file" ] && githubdl 'okta/strap' '.npmrc' "$file"
 if ! grep -q "^cafile" "$file"; then echo "cafile=$_STRAP_OKTA_ROOT_CA_CERT" >> "$file"; fi
 logk
-
-ensure_brew 'yarn'
-
-logn "Checking grunt:"
-if ! command -v grunt >/dev/null; then
-  echo && log "Installing grunt..."
-  npm install -g grunt-cli >/dev/null
-fi
-logk
-
-ensure_brew 'phantomjs'
 
 logn "Checking okta_bash_profile in ~/.bash_profile:"
 ensure_strap_file "okta_bash_profile"
