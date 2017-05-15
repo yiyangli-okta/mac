@@ -591,6 +591,7 @@ else
   jenv enable-plugin export
   jenv enable-plugin maven
   jenv enable-plugin groovy
+  jenv enable-plugin gradle
   jenv enable-plugin springboot
 fi
 logk
