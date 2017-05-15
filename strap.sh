@@ -588,13 +588,17 @@ else
   eval "$(jenv init -)"
   jenv add "$(/usr/libexec/java_home)"
   jenv global 1.8
-  jenv enable-plugin export
-  jenv enable-plugin maven
-  jenv enable-plugin groovy
-  jenv enable-plugin gradle
-  jenv enable-plugin springboot
 fi
 logk
+
+if ! jenv versions --bare | grep -q "^1.8$"; then jenv add "$(/usr/libexec/java_home)"; fi
+if ! jenv versions --bare | grep -q "^1.7$"; then jenv add "$(/usr/libexec/java_home -v 1.7)"; fi
+
+logn "Checking jenv export plugin:" && jenv enable-plugin export >/dev/null 2>&1 && logk
+logn "Checking jenv maven plugin:" && jenv enable-plugin maven >/dev/null 2>&1 && logk
+logn "Checking jenv groovy plugin:" && jenv enable-plugin groovy >/dev/null 2>&1 && logk
+logn "Checking jenv gradle plugin:" && jenv enable-plugin gradle >/dev/null 2>&1 && logk
+logn "Checking jenv springboot plugin:" && jenv enable-plugin springboot >/dev/null 2>&1 && logk
 
 logn "Checking jenv in ~/.bash_profile:"
 if ! grep -q jenv "$HOME/.bash_profile"; then
@@ -605,9 +609,6 @@ if ! grep -q jenv "$HOME/.bash_profile"; then
   echo 'if command -v jenv >/dev/null; then eval "$(jenv init -)"; fi;' >> ~/.bash_profile;
 fi
 logk
-
-if ! jenv versions --bare | grep -q "^1.8$"; then jenv add "$(/usr/libexec/java_home)"; fi
-if ! jenv versions --bare | grep -q "^1.7$"; then jenv add "$(/usr/libexec/java_home -v 1.7)"; fi
 
 ensure_java_cert() {
   local cert="$1" && [ ! -f "$cert" ] && abort 'add_java_cert: $1 is not a file'
