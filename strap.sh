@@ -150,7 +150,14 @@ readval() {
   eval $result=\$first
 }
 
-_STRAP_MACOSX_VERSION="$(sw_vers -productVersion)"
+# allow subshells to call these functions:
+export -f abort
+export -f log
+export -f logn
+export -f logk
+export -f readval
+
+export _STRAP_MACOSX_VERSION="$(sw_vers -productVersion)"
 echo "$_STRAP_MACOSX_VERSION" | grep $Q -E "^10.(9|10|11|12)" || { abort "Run Strap on Mac OS X 10.9/10/11/12."; }
 
 [ "$USER" = "root" ] && abort "Run Strap as yourself, not root."
@@ -169,6 +176,9 @@ logk
 logn "Checking ~/.bash_profile:"
 [ ! -f "$HOME/.bash_profile" ] && echo && log "Creating ~/.bash_profile..." && touch "$HOME/.bash_profile"
 logk
+
+export _STRAP_USER_DIR="$HOME/.strap/okta"
+mkdir -p "$_STRAP_USER_DIR"
 
 logn "Checking security settings:"
 defaults write com.apple.Safari com.apple.Safari.ContentPageGroupIdentifier.WebKit2JavaEnabled -bool false
@@ -346,22 +356,16 @@ ensure_brew_bash_profile() {
   logk
 }
 
+# allow subshells to call these functions:
+export -f ensure_formula
+export -f ensure_brew
+export -f ensure_cask
+export -f ensure_brew_bash_profile
+
 ensure_brew "bash-completion"
 ensure_brew_bash_profile "bash-completion" "etc/bash_completion"
 
 ensure_brew "openssl"
-
-logn "Checking Okta Root CA Cert in OS X keychain:"
-_STRAP_USER_DIR="$HOME/.strap/okta"
-mkdir -p "$_STRAP_USER_DIR"
-_STRAP_OKTA_ROOT_CA_CERT="$_STRAP_USER_DIR/Okta-Root-CA.pem"
-[ -f "$_STRAP_OKTA_ROOT_CA_CERT" ] || curl -sL http://ca.okta.com/Okta-Root-CA.pem -o "$_STRAP_OKTA_ROOT_CA_CERT"
-if ! sudo security find-certificate -c "Okta Root CA" /Library/Keychains/System.keychain >/dev/null 2>&1; then
-  sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "$_STRAP_OKTA_ROOT_CA_CERT"
-fi
-# sudo security delete-certificate -c "Okta Root CA"
-logk
-
 ensure_brew "jq"
 ensure_brew "git"
 
@@ -374,7 +378,7 @@ else
 fi
 
 _STRAP_KEYCHAIN_ENTRY_LABEL="Okta Strap GitHub API personal access token"
-_STRAP_GITHUB_API_TOKEN="${STRAP_GITHUB_TOKEN}"
+export _STRAP_GITHUB_API_TOKEN="${STRAP_GITHUB_TOKEN}"
 _STRAP_GITHUB_TOKEN_COMMENT='User-supplied GitHub personal access token'
 _store_github_token=false
 
@@ -384,7 +388,7 @@ if [ ! -z "$_STRAP_GITHUB_API_TOKEN" ]; then # user specified a token - let's ch
   _STRAP_GITHUB_TOKEN_COMMENT='User-supplied GitHub personal access token'
   _store_github_token=true
 elif security find-internet-password -a "$STRAP_GITHUB_USER" -s api.github.com -l "$_STRAP_KEYCHAIN_ENTRY_LABEL" >/dev/null 2>&1; then
-  _STRAP_GITHUB_API_TOKEN=$(security find-internet-password -a "$STRAP_GITHUB_USER" -s api.github.com -l "$_STRAP_KEYCHAIN_ENTRY_LABEL" -w)
+  export _STRAP_GITHUB_API_TOKEN=$(security find-internet-password -a "$STRAP_GITHUB_USER" -s api.github.com -l "$_STRAP_KEYCHAIN_ENTRY_LABEL" -w)
   _store_github_token=false # it is already stored
 else
   STRAP_GITHUB_PASSWORD=
@@ -410,7 +414,7 @@ else
     #_response_body=$(echo "$_response" | sed '1,/^\r\{0,1\}$/d')
   fi
 
-  _STRAP_GITHUB_API_TOKEN=$(echo "$_response_body" | jq -er '.token')
+  export _STRAP_GITHUB_API_TOKEN=$(echo "$_response_body" | jq -er '.token')
   _STRAP_GITHUB_TOKEN_COMMENT=$(echo "$_response_body" | jq -er '.url') # use the token url as the comment in this case
   _store_github_token=true
 
@@ -472,281 +476,6 @@ fi
 
 logk
 
-#####################################
-# SSH Begin
-#####################################
-
-logn "Checking SSH config:"
-_STRAP_SSH_DIR="$HOME/.ssh"
-mkdir -p $_STRAP_SSH_DIR
-chmod 700 $_STRAP_SSH_DIR
-
-_STRAP_SSH_CONFIG_FILE="$_STRAP_SSH_DIR/config"
-_STRAP_SSH_AUTHZ_KEYS="$_STRAP_SSH_DIR/authorized_keys"
-[ -f "$_STRAP_SSH_AUTHZ_KEYS" ] || touch "$_STRAP_SSH_AUTHZ_KEYS"
-chmod 600 "$_STRAP_SSH_AUTHZ_KEYS"
-
-_STRAP_SSH_KNOWN_HOSTS="$_STRAP_SSH_DIR/known_hosts"
-[ -f "$_STRAP_SSH_KNOWN_HOSTS" ] || touch "$_STRAP_SSH_KNOWN_HOSTS"
-chmod 600 "$_STRAP_SSH_KNOWN_HOSTS"
-
-_STRAP_SSH_KEY="$_STRAP_SSH_DIR/id_rsa"
-_STRAP_SSH_PUB_KEY="$_STRAP_SSH_KEY.pub"
-_STRAP_SSH_KEY_PASSPHRASE="$(openssl rand 48 -base64)"
-
-if [[ $_STRAP_MACOSX_VERSION == "10.12"* ]] && [ ! -f "$_STRAP_SSH_CONFIG_FILE" ]; then
-  touch $_STRAP_SSH_CONFIG_FILE
-  echo 'Host *' >> $_STRAP_SSH_CONFIG_FILE
-  echo '  UseKeychain yes' >> $_STRAP_SSH_CONFIG_FILE
-  echo '  AddKeysToAgent yes' >> $_STRAP_SSH_CONFIG_FILE
-fi
-
-_strap_created_ssh_key=false
-
-if [ ! -f "$_STRAP_SSH_KEY" ]; then
-
-  [ -z "$STRAP_GIT_EMAIL" ] && readval STRAP_GIT_EMAIL "Enter your email address" false true
-
-  _STRAP_SSH_AGENT_PID=$(ps aux|grep '[s]sh-agent -s'|sed -E -n 's/[^[:space:]]+[[:space:]]+([[:digit:]]+).*/\1/p')
-  if [ -z "$_STRAP_SSH_AGENT_PID" ]; then
-    ssh-agent -s >/dev/null
-  fi
-
-  ssh-keygen -t rsa -b 4096 -C "strap auto-generated key for $STRAP_GIT_EMAIL" -P "$_STRAP_SSH_KEY_PASSPHRASE" -f "$_STRAP_SSH_KEY" -q
-
-  _strap_created_ssh_key=true
-
-  expect << EOF
-    spawn ssh-add -K $_STRAP_SSH_KEY
-    expect "Enter passphrase"
-    send "$_STRAP_SSH_KEY_PASSPHRASE\r"
-    expect eof
-EOF
-
-fi
-
-chmod 400 "$_STRAP_SSH_KEY"
-chmod 400 "$_STRAP_SSH_PUB_KEY"
-[ -f "$_STRAP_SSH_CONFIG_FILE" ] && chmod 600 "$_STRAP_SSH_CONFIG_FILE"
-logk
-#####################################
-# SSH End
-#####################################
-
-#####################################
-# Github SSH Key Begin
-#####################################
-logn "Checking GitHub SSH config:"
-
-_STRAP_GITHUB_KNOWN_HOST="github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ=="
-
-if [ $_strap_created_ssh_key = true ]; then
-  _STRAP_SSH_PUB_KEY_CONTENTS="$(<$_STRAP_SSH_PUB_KEY)"
-
-  _NOW="$(date -u +%FT%TZ)"
-  _RESULT=$(curl --silent --show-error --output /dev/null --write-out %{http_code} \
-         -u "$STRAP_GITHUB_USER:$_STRAP_GITHUB_API_TOKEN" \
-         -d "{ \"title\": \"Okta Strap-generated RSA public key on $_NOW\", \"key\": \"$_STRAP_SSH_PUB_KEY_CONTENTS\" }" \
-         https://api.github.com/user/keys) 2>/dev/null
-
-  [ "$_RESULT" -ne "201" ] && abort 'Unable to upload Strap-generated RSA private key to GitHub'
-fi
-
-# Add github to known hosts:
-[ ! -f "$_STRAP_SSH_KNOWN_HOSTS" ] && touch "$_STRAP_SSH_KNOWN_HOSTS"
-if ! grep "^github.com" "$_STRAP_SSH_KNOWN_HOSTS" >/dev/null 2>&1; then
-  echo "$_STRAP_GITHUB_KNOWN_HOST" >> "$_STRAP_SSH_KNOWN_HOSTS"
-fi
-
-chmod 600 "$_STRAP_SSH_KNOWN_HOSTS"
-
-logk
-#####################################
-# Github SSH Key End
-#####################################
-
-ensure_brew "gnupg"
-ensure_brew "httpie"
-ensure_brew "mysql"
-ensure_brew "percona-toolkit"
-ensure_brew "liquidprompt"
-ensure_brew_bash_profile "liquidprompt" "share/liquidprompt"
-ensure_cask "java"
-ensure_cask "java7"
-ensure_cask "jce-unlimited-strength-policy"
-
-_OLD_JENV_GLOBAL=""
-logn "Checking jenv:"
-if brew list | grep ^jenv$ >/dev/null 2>&1; then
-  eval "$(jenv init -)"
-  _OLD_JENV_GLOBAL="$(jenv global)"
-else
-  echo
-  log "Installing jenv..."
-  brew install jenv
-  export PATH="$HOME/.jenv/bin:$PATH"
-  eval "$(jenv init -)"
-  jenv add "$(/usr/libexec/java_home)"
-  jenv global 1.8
-fi
-logk
-
-if ! jenv versions --bare | grep -q "^1.8$"; then jenv add "$(/usr/libexec/java_home)"; fi
-if ! jenv versions --bare | grep -q "^1.7$"; then jenv add "$(/usr/libexec/java_home -v 1.7)"; fi
-
-logn "Checking jenv export plugin:" && jenv enable-plugin export >/dev/null 2>&1 && logk
-logn "Checking jenv maven plugin:" && jenv enable-plugin maven >/dev/null 2>&1 && logk
-logn "Checking jenv groovy plugin:" && jenv enable-plugin groovy >/dev/null 2>&1 && logk
-logn "Checking jenv gradle plugin:" && jenv enable-plugin gradle >/dev/null 2>&1 && logk
-logn "Checking jenv springboot plugin:" && jenv enable-plugin springboot >/dev/null 2>&1 && logk
-
-logn "Checking jenv in ~/.bash_profile:"
-if ! grep -q jenv "$HOME/.bash_profile"; then
-  echo && log "Enabling jenv in ~/.bash_profile..."
-  echo '' >> ~/.bash_profile;
-  echo '# strap:jenv (will also set JAVA_HOME env var due to jenv export plugin)' >> ~/.bash_profile;
-  echo 'export PATH="$HOME/.jenv/bin:$PATH"' >> ~/.bash_profile;
-  echo 'if command -v jenv >/dev/null; then eval "$(jenv init -)"; fi;' >> ~/.bash_profile;
-fi
-logk
-
-ensure_java_cert() {
-  local cert="$1" && [ ! -f "$cert" ] && abort 'add_java_cert: $1 is not a file'
-  local alias="$2" && [ -z "$alias" ] && abort 'add_java_cert: $2 is required and must be a keystore alias name'
-  JAVA_HOME="$(jenv javahome)"
-  if ! sudo keytool -list -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "$alias" >/dev/null 2>&1; then
-    sudo keytool -import -trustcacerts -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "$alias" -file "$cert" >/dev/null 2>&1
-  fi
-  #sudo keytool -delete -noprompt -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass "changeit" -alias "$alias"
-}
-
-logn "Checking Okta Root CA Cert in Java Keystore:"
-jenv global 1.8
-ensure_java_cert "$_STRAP_OKTA_ROOT_CA_CERT" 'oktaroot'
-jenv global 1.7
-ensure_java_cert "$_STRAP_OKTA_ROOT_CA_CERT" 'oktaroot'
-logk
-
-logn "Checking Okta Internet CA Cert in Java Keystore:"
-_STRAP_OKTA_NET_CA_CERT="$_STRAP_USER_DIR/Okta-Internet-CA.pem"
-[ -f "$_STRAP_OKTA_NET_CA_CERT" ] || curl -sL http://ca.okta.com/Okta-Internet-CA.pem -o "$_STRAP_OKTA_NET_CA_CERT"
-jenv global 1.8
-ensure_java_cert "$_STRAP_OKTA_NET_CA_CERT" "mavensrv"
-jenv global 1.7
-ensure_java_cert "$_STRAP_OKTA_NET_CA_CERT" "mavensrv"
-logk
-
-logn "Checking java7 unlimited cryptography:"
-jenv global 1.7
-JAVA_HOME="$(jenv javahome)"
-JCE_DIR="$JAVA_HOME/jre/lib/security"
-if [ -f "$JCE_DIR/local_policy.jar.orig" ]; then
-  logk
-else
-  echo
-  log "Installing java7 unlimited cryptography..."
-  pushd $JCE_DIR >/dev/null
-  # backup existing JVM files that we will replace just in case:
-  sudo mv local_policy.jar local_policy.jar.orig
-  sudo mv US_export_policy.jar US_export_policy.jar.orig
-  sudo curl -sLO 'http://download.oracle.com/otn-pub/java/jce/7/UnlimitedJCEPolicyJDK7.zip' -H 'Cookie: oraclelicense=accept-securebackup-cookie'
-  sudo unzip -q UnlimitedJCEPolicyJDK7.zip
-  sudo mv UnlimitedJCEPolicy/US_export_policy.jar .
-  sudo mv UnlimitedJCEPolicy/local_policy.jar .
-  sudo chown root:wheel US_export_policy.jar
-  sudo chown root:wheel local_policy.jar
-  # cleanup download file:
-  sudo rm -rf UnlimitedJCEPolicyJDK7.zip
-  sudo rm -rf UnlimitedJCEPolicy
-  popd >/dev/null
-  logk
-fi
-
-# restore original jenv global if there was one:
-[ ! -z "$_OLD_JENV_GLOBAL" ] && jenv global "$_OLD_JENV_GLOBAL"
-
-ensure_brew "maven"
-ensure_brew "groovy"
-ensure_brew "lhazlewood/tap/spin"
-
-ensure_brew 'perl'
-ensure_brew 'cpanminus'
-logn "Checking perl cpan DBD::mysql module:"
-if ! perl -MDBD::mysql -e 1 >/dev/null 2>&1; then
-  echo && log "Installing perl cpan DBD::mysql module..."
-  cpanm DBD::mysql >/dev/null
-fi
-logk
-
-######################################
-# Docker Begin
-######################################
-#
-# We *DO NOT* run 'Docker for Mac' on purpose.  Docker for Mac does not yet
-# support bridge networks on the host OS (Mac OS X) into the docker containers,
-# which means you can't run the product (or in IntelliJ) in Mac OS because
-# network connections from the host OS into the docker containers are not possible.
-#
-# More info: https://github.com/docker/docker/issues/22753
-#
-# Because of this pretty severe limitation, we explicitly install the same functionality
-# as individual commands, including most notably virtualbox and docker-machine.  These
-# provide the same functionality as 'Docker for Mac', but allow bridge networks.
-#
-# Note that this approach is also a fully supported usage scenario for Docker.  The
-# Docker documentation explicitly indicates this is a fine approach for 'power users'
-# or scenarios where you might need to run more than one Docker VM.  See this page:
-#
-# https://docs.docker.com/docker-for-mac/docker-toolbox/#setting-up-to-run-docker-for-mac
-#
-# (specifically the 'Docker Toolbox and Docker for Mac coexistence' section).
-ensure_cask "virtualbox"
-ensure_brew "docker"
-ensure_brew "docker-machine"
-ensure_brew "docker-compose"
-ensure_brew "docker-clean"
-
-# We name our docker vm 'dev', so ensure this is in bash profile:
-logn "Checking 'dev' docker-machine in ~/.bash_profile:"
-if ! grep -q 'docker-machine env dev' "$HOME/.bash_profile"; then
-  echo && log "Enabling dev docker-machine check in ~/.bash_profile"
-  echo ''  >> "$HOME/.bash_profile"
-  echo '# strap:docker-machine:dev'  >> "$HOME/.bash_profile"
-  echo 'if command -v docker-machine >/dev/null && [ "$(docker-machine status dev 2> /dev/null)" == "Running" ]; then'  >> "$HOME/.bash_profile"
-  echo '  eval "$(docker-machine env dev)"' >> "$HOME/.bash_profile"
-  echo 'fi'  >> "$HOME/.bash_profile"
-fi
-logk
-######################################
-# Docker End
-######################################
-
-ensure_cask "iterm2" "/Applications/iTerm.app"
-ensure_cask "intellij-idea" "/Applications/IntelliJ IDEA.app"
-# TODO: add gmavenplus plugin to intellij
-#echo
-#log "Installing GMavenPlus plugin for intellij-idea..."
-#INTELLIJ_VERSION=`brew cask info intellij-idea | head -n1 | awk 'BEGIN { FS = "[:. ]" }; { print $3"."$4 }'`
-#curl -s \
-#   https://raw.githubusercontent.com/mycila/gmavenplus-intellij-plugin/master/gmavenplus-intellij-plugin.jar > \
-#   ~/Library/Application\ Support/IntelliJIdea$INTELLIJ_VERSION/gmavenplus-intellij-plugin.jar
-#logk
-
-logn "Checking Okta thirdparty tools:"
-mkdir -p "$HOME/okta"
-if [ ! -d "$HOME/okta/thirdparty" ]; then
-  pushd "$HOME/okta" >/dev/null
-  git clone git@github.com:okta/thirdparty.git
-  popd >/dev/null
-else
-  pushd "$HOME/okta/thirdparty" >/dev/null
-  if [ "$(git rev-parse --abbrev-ref HEAD)" == "master" ] && git diff-index --quiet HEAD >/dev/null; then
-    git pull >/dev/null
-  fi
-  popd >/dev/null
-fi
-logk
-
 githubdl() {
   local repo="$1" && [ -z "$repo" ] && abort 'githubdl: $1 must be a qualified repo, e.g. user/reponame'
   local path="$2" && [ -z "$path" ] && abort 'githubdl: $2 must be the repo file path, e.g. file.txt or my/other/file.txt'
@@ -765,152 +494,13 @@ ensure_strap_file() {
   [ ! -f "$file" ] && githubdl 'okta/strap' "$path" "$file"
   chmod go-rwx "$file"
 }
+export -f githubdl
+export -f ensure_strap_file
 
-ensure_cask 'tunnelblick' '/Applications/Tunnelblick.app'
-
-logn "Checking tunnelblick config files:"
-# we don't want to use $_STRAP_USER_DIR to store client.key or client.crt;
-# if the user deletes ~/.strap (thinking they're 'cleaning up'), we don't want
-# them to lose the ITSON-issued client.crt file (whereby their VPN would stop working),
-# so we keep these files in a separate directory that holds tunnelblick-only config:
-_dstdir="$HOME/.tunnelblick/okta"
-_path='okta-vpc.tblk/client.down' && ensure_strap_file "$_path" "$_dstdir" && chmod u+x "$_dstdir/$_path"
-_path='okta-vpc.tblk/client.up' && ensure_strap_file "$_path" "$_dstdir" && chmod u+x "$_dstdir/$_path"
-ensure_strap_file 'okta-vpc.tblk/okta-vpc-dev.ovpn' "$_dstdir"
-ensure_strap_file 'okta-vpc.tblk/okta_internal_ca.crt' "$_dstdir"
-_path='okta-vpc.tblk/client.key'
-_src="$HOME/$_path"
-_dst="$_dstdir/$_path"
-_filedir="${_dst%/*}"
-if [ ! -f "$_dst" ]; then
-  mkdir -p "$_filedir"
-  if [ -f "$_src" ]; then
-    cp "$_src" "$_dst" >/dev/null
-  else
-    _STRAP_UTC_DATE="$(date -u +%FT%TZ)"
-    export _STRAP_CLIENT_KEY_PASS="$(openssl rand 48 -base64)"
-    openssl genrsa -aes256 -passout env:_STRAP_CLIENT_KEY_PASS -out "$_dst" 2048 >/dev/null 2>&1 && chmod 400 "$_dst" >/dev/null
-    openssl req -batch -sha256 -new -subj "/C=US/O=Okta, Inc./OU=Engineering/CN=$STRAP_GIT_NAME" -days 1825 -key "$_dst" -passin env:_STRAP_CLIENT_KEY_PASS -out "$_filedir/client.csr"
-    if ! security find-generic-password -a "$USER" -s 'okta-strap-tunnelblick-dev-vpc' >/dev/null 2>&1; then
-      security add-generic-password -a "$USER" -s 'okta-strap-tunnelblick-dev-vpc' -l "Okta Strap Tunnelblick client.key passphrase" -j "Okta strap-generated passphrase for $_dst on $_STRAP_UTC_DATE" -w "$_STRAP_CLIENT_KEY_PASS"
-    fi
-    # security delete-generic-password -a "$USER" -s 'okta-vpc'
-    unset _STRAP_CLIENT_KEY_PASS
-  fi
-fi
-_path='okta-vpc.tblk/client.crt'
-_src="$HOME/$_path"
-_dst="$_dstdir/$_path"
-if [ ! -f "$_dst" ] && [ -f "$_src" ]; then cp "$_src" "$_dst" >/dev/null; fi
-chmod -R go-rwx "$HOME/.tunnelblick"
-logk
-
-logn 'Checking /etc/hosts loopback aliases:'
-ensure_loopback() {
-  local alias="$1" && [ -z "$1" ] && abort 'ensure_loopback: $1 must be an alias'
-  alias="$(echo -e ${alias} | tr -d '[:space:]')" # strip any whitespace in the hostname
-  local file="/etc/hosts"
-  if ! grep -F "${alias}" "$file" >/dev/null 2>&1; then
-    sudo bash -c "echo \"127.0.0.1 ${alias}\" >> \"$file\""
-  fi
-}
-_srcfilename="loopback-aliases.txt"
+_srcfilename="strap-private.sh"
 _srcfile="$HOME/.strap/okta/$_srcfilename"
 ensure_strap_file "$_srcfilename"
-while read line; do ensure_loopback "$line"; done <"$_srcfile"
-logk
-
-ensure_brew "nvm"
-mkdir -p "$HOME/.nvm"
-logn "Checking nvm in ~/.bash_profile:"
-if ! grep -q "NVM_DIR" "$HOME/.bash_profile"; then
-  echo && log "Enabling nvm in ~/.bash_profile:"
-  echo '' >> "$HOME/.bash_profile"
-  echo "# strap:nvm" >> "$HOME/.bash_profile"
-  echo 'export NVM_DIR="$HOME/.nvm"' >> "$HOME/.bash_profile"
-  echo 'if [ -f "$(brew --prefix)/opt/nvm/nvm.sh" ]; then' >> "$HOME/.bash_profile"
-  echo ' . "$(brew --prefix)/opt/nvm/nvm.sh"' >> "$HOME/.bash_profile"
-  echo 'fi' >> "$HOME/.bash_profile"
-fi
-logk
-
-if ! command -v nvm >/dev/null; then
-  export NVM_DIR="$HOME/.nvm"
-  . "$(brew --prefix)/opt/nvm/nvm.sh"
-fi
-
-version="5.6.0"
-logn "Checking node $version:"
-if command -v nvm >/dev/null && ! nvm ls "$version" >/dev/null; then
-  echo && log "Installing node $version..."
-  nvm install "$version" >/dev/null
-fi
-logk
-
-version="3.9.6"
-logn "Checking npm $version:"
-if [ "$(npm --version)" != "$version" ]; then
-  echo && log "Installing npm $vesion..."
-  npm install -g "npm@$version" >/dev/null
-fi
-logk
-
-logn "Checking grunt:"
-if ! command -v grunt >/dev/null; then
-  echo && log "Installing grunt..."
-  npm config set strict-ssl false
-  npm install -g grunt-cli >/dev/null
-  npm config delete strict-ssl
-fi
-logk
-
-ensure_brew 'yarn'
-ensure_brew 'phantomjs'
-
-logn "Checking .npmrc:"
-file="$HOME/.npmrc"
-[ ! -f "$file" ] && githubdl 'okta/strap' '.npmrc' "$file"
-if ! grep -q "^cafile" "$file"; then echo "cafile=$_STRAP_OKTA_ROOT_CA_CERT" >> "$file"; fi
-logk
-
-logn "Checking okta_bash_profile in ~/.bash_profile:"
-ensure_strap_file "okta_bash_profile"
-if ! grep -q "okta_bash_profile" "$HOME/.bash_profile"; then
-  echo && log "Enabling okta_bash_profile in ~/.bash_profile"
-  echo '' >> "$HOME/.bash_profile"
-  echo "# strap:okta_bash_profile" >> "$HOME/.bash_profile"
-  echo "if [ -f \"\$HOME/.strap/okta/okta_bash_profile\" ]; then" >> "$HOME/.bash_profile"
-  echo "  . \"\$HOME/.strap/okta/okta_bash_profile\"" >> "$HOME/.bash_profile"
-  echo 'fi' >> "$HOME/.bash_profile"
-fi
-. "$HOME/.strap/okta/okta_bash_profile"
-logk
-
-logn 'Checking ~/okta/override.properties:'
-file="$OKTA_HOME/override.properties"
-[ ! -f "$file" ] && echo 'default.services.host=192.168.99.100' > "$file"
-logk
-
-logn 'Checking ~/okta/spin.groovy:'
-file="$OKTA_HOME/spin.groovy"
-[ ! -f "$file" ] && githubdl 'okta/strap' 'spin.groovy' "$file"
-logk
-
-file="$OKTA_HOME/certs/tomcat-jmx-keystore.jks"
-logn "Checking $file:"
-if [ ! -f "$file" ]; then
-  mkdir -p "$OKTA_HOME/certs"
-  keytool -genkeypair -alias seleniumtest -keyalg RSA -validity 365 -keystore "$file" -storepass "$JMXKEYSTOREPASS" -keypass "$JMXKEYSTOREPASS" -dname "CN=Engineering Productivity, OU=Eng CI, O=Okta, L=San Francisco, S=CA, C=US"
-fi
-logk
-
-file="$OKTA_HOME/certs/tomcat-jmx-truststore.jks"
-logn "Checking $file:"
-if [ ! -f "$file" ]; then
-  mkdir -p "$OKTA_HOME/certs"
-  echo "yes" | keytool -v -noprompt -alias jmxTrustStore -import -file "$_STRAP_OKTA_ROOT_CA_CERT" -keystore "$file" --storepass "$JMXKEYSTOREPASS" >/dev/null 2>&1
-fi
-logk
+source "$_srcfile"
 
 # make config/state a little more secure, just in case:
 chmod -R go-rwx "$HOME/.strap"
