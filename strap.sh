@@ -163,6 +163,30 @@ echo "$_STRAP_MACOSX_VERSION" | grep $Q -E "^10.(9|10|11|12)" || { abort "Run St
 [ "$USER" = "root" ] && abort "Run Strap as yourself, not root."
 groups | grep $Q admin || abort "Add $USER to the admin group."
 
+# Detect the user's login shell rc file.
+detect_login_shell_and_rc_file() {
+  export STRAP_SHELL_CANONICAL=$(basename $SHELL)
+
+  local STRAP_SHELL_RC_FILENAME
+  case $STRAP_SHELL_CANONICAL in
+    'zsh') STRAP_SHELL_RC_FILENAME='.zshrc';;
+    'bash') STRAP_SHELL_RC_FILENAME='.bash_profile';;
+    *) echo "!!! Warning: unknown shell \$SHELL='$SHELL' has been detected. No shell rc files (e.g. '~/.bashrc') will be modified."
+    ;;
+  esac
+
+  export STRAP_SHELL_RC_FILE="$HOME/$STRAP_SHELL_RC_FILENAME"
+}
+detect_login_shell_and_rc_file
+append_line_to_shell_rc_file() {
+  echo $1 >> $STRAP_SHELL_RC_FILE
+}
+export append_line_to_shell_rc_file
+
+logn "Checking $STRAP_SHELL_RC_FILE:"
+[ ! -f $STRAP_SHELL_RC_FILE ] && echo && log "Creating $STRAP_SHELL_RC_FILE..." && touch $STRAP_SHELL_RC_FILE
+logk
+
 # Initialise sudo now to save prompting later.
 log "Enter your password (for sudo access):"
 sudo -k
@@ -171,10 +195,6 @@ sudo /usr/bin/true
 sudo bash "$STRAP_FULL_PATH" --sudo-wait &
 STRAP_SUDO_WAIT_PID="$!"
 ps -p "$STRAP_SUDO_WAIT_PID" &>/dev/null
-logk
-
-logn "Checking ~/.bash_profile:"
-[ ! -f "$HOME/.bash_profile" ] && echo && log "Creating ~/.bash_profile..." && touch "$HOME/.bash_profile"
 logk
 
 export _STRAP_USER_DIR="$HOME/.strap/okta"
@@ -276,10 +296,10 @@ if ! command -v brew >/dev/null 2>&1; then
   yes '' | /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)";
 
   if [[ "$PATH" != *"/usr/local/bin"* ]]; then
-    echo '' >> ~/.bash_profile;
-    echo '# homebrew' >> ~/.bash_profile;
-    echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bash_profile;
-    source "$HOME/.bash_profile"
+    append_line_to_shell_rc_file ''
+    append_line_to_shell_rc_file '# homebrew'
+    append_line_to_shell_rc_file 'export PATH="/usr/local/bin:$PATH"'
+    source $STRAP_SHELL_RC_FILE
   fi
 fi
 logk
@@ -338,20 +358,20 @@ ensure_cask() {
     ensure_formula "brew cask" "$formula"
   fi
 }
-ensure_brew_bash_profile() {
+ensure_brew_shell_rc_file() {
   local formula="$1"
   local path="$2"
-  [ -z "$formula" ] && abort "ensure_brew_bash_profile: \$1 must be the formula id"
-  [ -z "$path" ] && abort "ensure_brew_bash_profile: \$1 must be the brew script relative path"
+  [ -z "$formula" ] && abort "ensure_brew_shell_rc_file: \$1 must be the formula id"
+  [ -z "$path" ] && abort "ensure_brew_shell_rc_file: \$1 must be the brew script relative path"
 
-  logn "Checking ${formula} in ~/.bash_profile:"
-  if ! grep -q ${path} "$HOME/.bash_profile"; then
-    echo && log "Enabling ${formula} in ~/.bash_profile"
-    echo '' >> "$HOME/.bash_profile"
-    echo "# strap:${formula}" >> "$HOME/.bash_profile"
-    echo "if [ -f \$(brew --prefix)/${path} ]; then" >> "$HOME/.bash_profile"
-    echo "  . \$(brew --prefix)/${path}" >> "$HOME/.bash_profile"
-    echo 'fi' >> "$HOME/.bash_profile"
+  logn "Checking ${formula} in $STRAP_SHELL_RC_FILE:"
+  if ! grep -q ${path} $STRAP_SHELL_RC_FILE; then
+    echo && log "Enabling ${formula} in $STRAP_SHELL_RC_FILE"
+    append_line_to_shell_rc_file ''
+    append_line_to_shell_rc_file "# strap:${formula}"
+    append_line_to_shell_rc_file "if [ -f \$(brew --prefix)/${path} ]; then"
+    append_line_to_shell_rc_file "  . \$(brew --prefix)/${path}"
+    append_line_to_shell_rc_file 'fi'
   fi
   logk
 }
@@ -360,10 +380,12 @@ ensure_brew_bash_profile() {
 export -f ensure_formula
 export -f ensure_brew
 export -f ensure_cask
-export -f ensure_brew_bash_profile
+export -f ensure_brew_shell_rc_file
 
-ensure_brew "bash-completion"
-ensure_brew_bash_profile "bash-completion" "etc/bash_completion"
+if [ $STRAP_SHELL_CANONICAL = 'bash' ]; then
+  ensure_brew "bash-completion"
+  ensure_brew_bash_profile "bash-completion" "etc/bash_completion"
+fi
 
 ensure_brew "openssl"
 ensure_brew "jq"
