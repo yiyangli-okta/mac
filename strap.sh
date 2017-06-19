@@ -384,7 +384,7 @@ export -f ensure_brew_shell_rc_file
 
 if [ $STRAP_SHELL_CANONICAL = 'bash' ]; then
   ensure_brew "bash-completion"
-  ensure_brew_bash_profile "bash-completion" "etc/bash_completion"
+  ensure_brew_shell_rc_file "bash-completion" "etc/bash_completion"
 fi
 
 ensure_brew "openssl"
