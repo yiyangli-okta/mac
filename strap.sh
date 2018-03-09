@@ -158,7 +158,7 @@ export -f logk
 export -f readval
 
 export _STRAP_MACOSX_VERSION="$(sw_vers -productVersion)"
-echo "$_STRAP_MACOSX_VERSION" | grep $Q -E "^10.(9|10|11|12)" || { abort "Run Strap on Mac OS X 10.9/10/11/12."; }
+echo "$_STRAP_MACOSX_VERSION" | grep $Q -E "^10.(9|10|11|12|13)" || { abort "Run Strap on Mac OS X 10.9/10/11/12/13."; }
 
 [ "$USER" = "root" ] && abort "Run Strap as yourself, not root."
 groups | grep $Q admin || abort "Add $USER to the admin group."
