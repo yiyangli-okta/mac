@@ -521,6 +521,8 @@ export -f ensure_strap_file
 
 _srcfilename="strap-private.sh"
 _srcfile="$HOME/.strap/okta/$_srcfilename"
+# always get the latest version:
+rm -rf "$_srcfile"
 ensure_strap_file "$_srcfilename"
 source "$_srcfile"
 
