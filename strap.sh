@@ -163,30 +163,6 @@ echo "$_STRAP_MACOSX_VERSION" | grep $Q -E "^10.(9|10|11|12|13)" || { abort "Run
 [ "$USER" = "root" ] && abort "Run Strap as yourself, not root."
 groups | grep $Q admin || abort "Add $USER to the admin group."
 
-# Detect the user's login shell rc file.
-detect_login_shell_and_rc_file() {
-  export STRAP_SHELL_CANONICAL=$(basename $SHELL)
-
-  local STRAP_SHELL_RC_FILENAME
-  case $STRAP_SHELL_CANONICAL in
-    'zsh') STRAP_SHELL_RC_FILENAME='.zshrc';;
-    'bash') STRAP_SHELL_RC_FILENAME='.bash_profile';;
-    *) echo "!!! Warning: unknown shell \$SHELL='$SHELL' has been detected. No shell rc files (e.g. '~/.bashrc') will be modified."
-    ;;
-  esac
-
-  export STRAP_SHELL_RC_FILE="$HOME/$STRAP_SHELL_RC_FILENAME"
-}
-detect_login_shell_and_rc_file
-append_line_to_shell_rc_file() {
-  echo $1 >> $STRAP_SHELL_RC_FILE
-}
-export append_line_to_shell_rc_file
-
-logn "Checking $STRAP_SHELL_RC_FILE:"
-[ ! -f $STRAP_SHELL_RC_FILE ] && echo && log "Creating $STRAP_SHELL_RC_FILE..." && touch $STRAP_SHELL_RC_FILE
-logk
-
 # Initialise sudo now to save prompting later.
 log "Enter your password (for sudo access):"
 sudo -k
@@ -196,9 +172,6 @@ sudo bash "$STRAP_FULL_PATH" --sudo-wait &
 STRAP_SUDO_WAIT_PID="$!"
 ps -p "$STRAP_SUDO_WAIT_PID" &>/dev/null
 logk
-
-export _STRAP_USER_DIR="$HOME/.strap/okta"
-mkdir -p "$_STRAP_USER_DIR"
 
 logn "Checking security settings:"
 defaults write com.apple.Safari com.apple.Safari.ContentPageGroupIdentifier.WebKit2JavaEnabled -bool false
@@ -289,17 +262,80 @@ if ! softwareupdate -l 2>&1 | grep $Q "No new software available."; then
 fi
 logk
 
-# Homebrew
+#############################################################
+# Shell RC File assertions:
+#############################################################
+
+export _STRAP_USER_DIR="$HOME/.strap"
+mkdir -p "$_STRAP_USER_DIR"
+
+export STRAP_SHELL=$(basename $SHELL)
+
+case $STRAP_SHELL in
+  'zsh') STRAP_SHELLRC_BASE_NAME='zshrc';;
+  'bash') STRAP_SHELLRC_BASE_NAME='bash_profile';;
+  *) abort "Unknown shell \$SHELL='$STRAP_SHELL'. Strap currently only works with bash and zsh."
+  ;;
+esac
+
+export STRAP_SHELLRC_BASE_NAME
+export STRAP_SHELLRC_FILE="$HOME/.$STRAP_SHELLRC_BASE_NAME"
+export STRAPRC_FILE="$HOME/.strap/$STRAP_SHELLRC_BASE_NAME"
+
+STRAP_SHELLRC_PRETTY_NAME="\$HOME/.$STRAP_SHELLRC_BASE_NAME"
+export STRAPRC_PRETTY_NAME="\$HOME/.strap/$STRAP_SHELLRC_BASE_NAME"
+
+logn "Checking $STRAP_SHELLRC_PRETTY_NAME:"
+[ ! -f "$STRAP_SHELLRC_FILE" ] && echo && log "Creating $STRAP_SHELLRC_PRETTY_NAME..." && touch "$STRAP_SHELLRC_FILE"
+chmod u+x "$STRAP_SHELLRC_FILE"
+logk
+
+logn "Checking $STRAPRC_PRETTY_NAME:"
+[ ! -f $STRAPRC_FILE ] && echo && log "Creating $STRAPRC_PRETTY_NAME..." && touch $STRAPRC_FILE
+chmod u+x "$STRAPRC_FILE"
+logk
+
+println() {
+  echo "$2" >> "$1"
+}
+export -f println
+
+shellrc_println() {
+  println "$STRAP_SHELLRC_FILE" "$1"
+}
+export -f shellrc_println # export to subshells
+
+straprc_println() {
+  println "$STRAPRC_FILE" "$1"
+}
+export -f straprc_println # export to subshells
+
+logn "Checking $STRAPRC_PRETTY_NAME referenced in $STRAP_SHELLRC_PRETTY_NAME: "
+if ! grep -q "$STRAPRC_PRETTY_NAME" "$STRAP_SHELLRC_FILE"; then
+  echo && log "Enabling ${STRAPRC_PRETTY_NAME} in $STRAP_SHELLRC_PRETTY_NAME..."
+  shellrc_println ''
+  shellrc_println "# strap:begin"
+  shellrc_println "[ -f \"$STRAPRC_PRETTY_NAME\" ] && . \"$STRAPRC_PRETTY_NAME\""
+  shellrc_println "# strap:end"
+fi
+logk
+
+
+#############################################################
+# Homebrew:
+#############################################################
+
 logn "Checking Homebrew:"
 if ! command -v brew >/dev/null 2>&1; then
   echo && log "Installing Homebrew..."
   yes '' | /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)";
 
   if [[ "$PATH" != *"/usr/local/bin"* ]]; then
-    append_line_to_shell_rc_file ''
-    append_line_to_shell_rc_file '# homebrew'
-    append_line_to_shell_rc_file 'export PATH="/usr/local/bin:$PATH"'
-    source $STRAP_SHELL_RC_FILE
+    straprc_println ''
+    straprc_println '# homebrew:begin'
+    straprc_println 'export PATH="/usr/local/bin:$PATH"'
+    straprc_println '# homebrew:end'
+    source $STRAPRC_FILE
   fi
 fi
 logk
@@ -358,20 +394,22 @@ ensure_cask() {
     ensure_formula "brew cask" "$formula"
   fi
 }
-ensure_brew_shell_rc_file() {
-  local formula="$1"
-  local path="$2"
-  [ -z "$formula" ] && abort "ensure_brew_shell_rc_file: \$1 must be the formula id"
-  [ -z "$path" ] && abort "ensure_brew_shell_rc_file: \$1 must be the brew script relative path"
 
-  logn "Checking ${formula} in $STRAP_SHELL_RC_FILE:"
-  if ! grep -q ${path} $STRAP_SHELL_RC_FILE; then
-    echo && log "Enabling ${formula} in $STRAP_SHELL_RC_FILE"
-    append_line_to_shell_rc_file ''
-    append_line_to_shell_rc_file "# strap:${formula}"
-    append_line_to_shell_rc_file "if [ -f \$(brew --prefix)/${path} ]; then"
-    append_line_to_shell_rc_file "  . \$(brew --prefix)/${path}"
-    append_line_to_shell_rc_file 'fi'
+ensure_brew_shellrc_entry() {
+  local file="$1" && [ ! -f "$file" ] && abort 'ensure_brew_shellrc_entry: $1 must be the shell rc file'
+  local formula="$2" && [ -z "$formula" ] && abort 'ensure_brew_shellrc_entry: $2 must be the formula id'
+  local path="$3" && [ -z "$path" ] && abort 'ensure_brew_shellrc_entry: $3 must be the brew script relative path'
+
+  logn "Checking ${formula} in $file:"
+  if ! grep -q ${path} ${file}; then
+    echo && log "Enabling ${formula} in $file"
+
+    println $file ''
+    println $file "# homebrew:${formula}:begin"
+    println $file "if [ -f \$(brew --prefix)/${path} ]; then"
+    println $file "  . \$(brew --prefix)/${path}"
+    println $file 'fi'
+    println $file "# homebrew:${formula}:end"
   fi
   logk
 }
@@ -380,11 +418,11 @@ ensure_brew_shell_rc_file() {
 export -f ensure_formula
 export -f ensure_brew
 export -f ensure_cask
-export -f ensure_brew_shell_rc_file
+export -f ensure_brew_shellrc_entry
 
-if [ $STRAP_SHELL_CANONICAL = 'bash' ]; then
+if [ $STRAP_SHELL = 'bash' ]; then
   ensure_brew "bash-completion"
-  ensure_brew_shell_rc_file "bash-completion" "etc/bash_completion"
+  ensure_brew_shellrc_entry "$STRAPRC_FILE" "bash-completion" "etc/bash_completion"
 fi
 
 ensure_brew "openssl"
@@ -519,15 +557,18 @@ ensure_strap_file() {
 export -f githubdl
 export -f ensure_strap_file
 
+
+_dstdir="$HOME/.strap/okta"
+mkdir -p "$_dstdir"
 _srcfilename="strap-private.sh"
-_srcfile="$HOME/.strap/okta/$_srcfilename"
+_srcfile="$_dstdir/$_srcfilename"
 # always get the latest version:
 rm -rf "$_srcfile"
-ensure_strap_file "$_srcfilename"
+ensure_strap_file "$_srcfilename" "$_dstdir"
 source "$_srcfile"
 
 # make config/state a little more secure, just in case:
-chmod -R go-rwx "$HOME/.strap"
+chmod -R go-rwx "$_STRAP_USER_DIR"
 
 STRAP_SUCCESS="1"
 log "Your system is now Strap'd!"
