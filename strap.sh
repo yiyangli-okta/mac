@@ -280,10 +280,10 @@ esac
 
 export STRAP_SHELLRC_BASE_NAME
 export STRAP_SHELLRC_FILE="$HOME/.$STRAP_SHELLRC_BASE_NAME"
-export STRAPRC_FILE="$HOME/.strap/$STRAP_SHELLRC_BASE_NAME"
-
 STRAP_SHELLRC_PRETTY_NAME="\$HOME/.$STRAP_SHELLRC_BASE_NAME"
-export STRAPRC_PRETTY_NAME="\$HOME/.strap/$STRAP_SHELLRC_BASE_NAME"
+
+export STRAPRC_FILE="$HOME/.strap/straprc"
+export STRAPRC_PRETTY_NAME="\$HOME/.strap/straprc"
 
 logn "Checking $STRAP_SHELLRC_PRETTY_NAME:"
 [ ! -f "$STRAP_SHELLRC_FILE" ] && echo && log "Creating $STRAP_SHELLRC_PRETTY_NAME..." && touch "$STRAP_SHELLRC_FILE"
@@ -565,7 +565,8 @@ _srcfile="$_dstdir/$_srcfilename"
 # always get the latest version:
 rm -rf "$_srcfile"
 ensure_strap_file "$_srcfilename" "$_dstdir"
-source "$_srcfile"
+chmod u+x "$_srcfile"
+. "$_srcfile"
 
 # make config/state a little more secure, just in case:
 chmod -R go-rwx "$_STRAP_USER_DIR"
