@@ -290,11 +290,6 @@ println() {
 }
 export -f println
 
-shellrc_println() {
-  println "$STRAP_SHELLRC_FILE" "$1"
-}
-export -f shellrc_println # export to subshells
-
 straprc_println() {
   println "$STRAPRC_FILE" "$1"
 }
@@ -321,15 +316,18 @@ fi
 chmod u+x "$STRAPRC_FILE"
 logk
 
-logn "Checking $STRAPRC_PRETTY_NAME referenced in $STRAP_SHELLRC_PRETTY_NAME: "
-if ! grep -q "$STRAPRC_PRETTY_NAME" "$STRAP_SHELLRC_FILE"; then
-  echo && log "Enabling ${STRAPRC_PRETTY_NAME} in $STRAP_SHELLRC_PRETTY_NAME..."
-  shellrc_println ''
-  shellrc_println "# strap:begin"
-  shellrc_println "[ -f \"$STRAPRC_PRETTY_NAME\" ] && . \"$STRAPRC_PRETTY_NAME\""
-  shellrc_println "# strap:end"
-fi
-logk
+declare -a files=("$HOME/.bash_profile" "$HOME/.zshrc")
+for file in "${files[@]}"; do
+  logn "Checking $STRAPRC_PRETTY_NAME referenced in $file: "
+  if ! grep -q "$STRAPRC_PRETTY_NAME" "$file"; then
+    echo && log "Enabling ${STRAPRC_PRETTY_NAME} in $file..."
+    println "$file" ''
+    println "$file" "# strap:begin"
+    println "$file" "[ -f \"$STRAPRC_PRETTY_NAME\" ] && . \"$STRAPRC_PRETTY_NAME\""
+    println "$file" "# strap:end"
+  fi
+  logk
+done
 
 
 #############################################################
@@ -366,7 +364,7 @@ fi
 logk
 
 logn "Checking Homebrew updates:"
-brew update
+brew update >/dev/null
 brew upgrade
 logk
 
@@ -437,9 +435,48 @@ export -f ensure_brew
 export -f ensure_cask
 export -f ensure_brew_shellrc_entry
 
+#############################################################
+# bash:
+#############################################################
+
+ensure_brew 'bash'
+
+logn "Checking $(brew --prefix)/bin/bash in /etc/shells:"
+if ! grep -q "$(brew --prefix)/bin/bash" /etc/shells; then
+  echo "$(brew --prefix)/bin/bash" | sudo tee -a /etc/shells
+fi
+logk
+
 ensure_brew "bash-completion"
 ensure_brew_shellrc_entry "$STRAPRC_FILE" "bash-completion" "etc/bash_completion" 'bash'
+[ -n "$BASH_VERSION" ] && [ "$SHELL" != "$(which bash)" ] && sudo chsh -s "$(which bash)" "$(logname)"
 
+
+#############################################################
+# zsh:
+#############################################################
+
+ensure_brew 'zsh'
+logn "Checking $(brew --prefix)/bin/zsh in /etc/shells:"
+if ! grep -q "$(brew --prefix)/bin/zsh" /etc/shells; then
+  echo "$(brew --prefix)/bin/zsh" | sudo tee -a /etc/shells
+fi
+logk
+
+ensure_brew 'zsh-completions'
+chmod go-w "$(brew --prefix)/share"
+[ ! -f "$HOME/.zshrc" ] && touch "$HOME/.zshrc"
+if ! grep -q 'share/zsh-completions' "$HOME/.zshrc"; then
+  echo "fpath=($(brew --prefix)/share/zsh-completions \$fpath)" >> "$HOME/.zshrc"
+fi
+[ -n "$ZSH_VERSION" ] && [ "$SHELL" != "$(which zsh)" ] && sudo chsh -s "$(which zsh)" "$(logname)"
+
+
+#############################################################
+# Git & GitHub:
+#############################################################
+
+# openssl and jq are pre-requisites for the GitHub interaction below:
 ensure_brew "openssl"
 ensure_brew "jq"
 ensure_brew "git"
