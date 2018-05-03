@@ -270,18 +270,6 @@ export _STRAP_USER_DIR="$HOME/.strap"
 mkdir -p "$_STRAP_USER_DIR"
 
 export STRAP_SHELL=$(basename $SHELL)
-
-case $STRAP_SHELL in
-  'zsh') STRAP_SHELLRC_BASE_NAME='zshrc';;
-  'bash') STRAP_SHELLRC_BASE_NAME='bash_profile';;
-  *) abort "Unknown shell \$SHELL='$STRAP_SHELL'. Strap currently only works with bash and zsh."
-  ;;
-esac
-
-export STRAP_SHELLRC_BASE_NAME
-export STRAP_SHELLRC_FILE="$HOME/.$STRAP_SHELLRC_BASE_NAME"
-STRAP_SHELLRC_PRETTY_NAME="\$HOME/.$STRAP_SHELLRC_BASE_NAME"
-
 export STRAPRC_FILE="$HOME/.strap/straprc"
 export STRAPRC_PRETTY_NAME="\$HOME/.strap/straprc"
 
@@ -294,11 +282,6 @@ straprc_println() {
   println "$STRAPRC_FILE" "$1"
 }
 export -f straprc_println # export to subshells
-
-logn "Checking $STRAP_SHELLRC_PRETTY_NAME:"
-[ ! -f "$STRAP_SHELLRC_FILE" ] && echo && log "Creating $STRAP_SHELLRC_PRETTY_NAME..." && touch "$STRAP_SHELLRC_FILE"
-chmod u+x "$STRAP_SHELLRC_FILE"
-logk
 
 logn "Checking $STRAPRC_PRETTY_NAME:"
 if [ ! -f $STRAPRC_FILE ]; then
@@ -318,6 +301,12 @@ logk
 
 declare -a files=("$HOME/.bash_profile" "$HOME/.zshrc")
 for file in "${files[@]}"; do
+
+  logn "Checking $file:"
+  [ ! -f "$file" ] && echo && log "Creating $file..." && touch "$file"
+  chmod u+x "$file"
+  logk
+
   logn "Checking $STRAPRC_PRETTY_NAME referenced in $file: "
   if ! grep -q "$STRAPRC_PRETTY_NAME" "$file"; then
     echo && log "Enabling ${STRAPRC_PRETTY_NAME} in $file..."
