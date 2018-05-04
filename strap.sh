@@ -397,20 +397,17 @@ ensure_brew_shellrc_entry() {
   local file="$1" && [ ! -f "$file" ] && abort 'ensure_brew_shellrc_entry: $1 must be the shell rc file'
   local formula="$2" && [ -z "$formula" ] && abort 'ensure_brew_shellrc_entry: $2 must be the formula id'
   local path="$3" && [ -z "$path" ] && abort 'ensure_brew_shellrc_entry: $3 must be the brew script relative path'
-  local shell="$4"
-  local shellcheck=''
-  if [ "$shell" =  'bash' ]; then
-    shellcheck='[ -n "$BASH_VERSION" ] && '
-  elif [ "$shell" = 'zsh' ]; then
-    shellcheck='[ -n "$ZSH_VERSION" ] && '
-  fi
+  local extraConditions="$4"
+
+  # if extraConditions are present, ensure there is a ' && ' at the end for joining:
+  [ -n "$extraConditions" ] && [[ "$extraConditions" != "* && " ]] && extraConditions="$extraConditions && "
 
   logn "Checking ${formula} in $file:"
   if ! grep -q ${path} ${file}; then
     echo && log "Enabling ${formula} in $file"
     println $file ''
     println $file "# homebrew:${formula}:begin"
-    println $file "if $shellcheck[ -f \$(brew --prefix)/${path} ]; then"
+    println $file "if $extraConditions[ -f \$(brew --prefix)/${path} ]; then"
     println $file "  . \$(brew --prefix)/${path}"
     println $file 'fi'
     println $file "# homebrew:${formula}:end"
@@ -437,7 +434,7 @@ fi
 logk
 
 ensure_brew "bash-completion"
-ensure_brew_shellrc_entry "$STRAPRC_FILE" "bash-completion" "etc/bash_completion" 'bash'
+ensure_brew_shellrc_entry "$STRAPRC_FILE" "bash-completion" "etc/bash_completion" '[ -n "$BASH_VERSION" ]'
 [ -n "$BASH_VERSION" ] && [ "$SHELL" != "$(which bash)" ] && sudo chsh -s "$(which bash)" "$(logname)"
 
 
