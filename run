@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+rm -rf "$HOME/.strap"
+mkdir -p "$HOME/.strap"
+curl -fsSL https://raw.githubusercontent.com/les-okta/mac/master/strap.sh -o "$HOME/.strap/strap.sh"
+bash "$HOME/.strap/strap.sh"
