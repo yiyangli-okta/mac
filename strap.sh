@@ -44,6 +44,8 @@ cleanup() {
   if [ -n "$STRAP_SUDO_WAIT_PID" ]; then
     sudo kill "$STRAP_SUDO_WAIT_PID"
   fi
+  [ -x "$HOME/.strap/.visudo/cleanup" ] && "$HOME/.strap/.visudo/cleanup"
+  rm -rf "$HOME/.strap/.visudo"
   sudo -k
   rm -f "$CLT_PLACEHOLDER"
   if [ -z "$STRAP_SUCCESS" ]; then
@@ -150,12 +152,61 @@ readval() {
   eval $result=\$first
 }
 
+println() {
+  echo "$2" >> "$1"
+}
+
+mkvisudocheck() {
+  local dir="$HOME/.strap/.visudo"
+  mkdir -p "$dir"
+  chmod go-rwx "$dir"
+  local file="$dir/check"
+  rm -rf "$file"
+  println "$file" '#!/bin/sh'
+  println "$file" 'if [ -z "$1" ]; then'
+  println "$file" '  EDITOR="$0" sudo -E visudo -q >/dev/null 2>&1'
+  println "$file" 'else'
+  println "$file" '  file="$1"'
+  println "$file" '  if grep -q "^Defaults[[:blank:]]\+timestamp_timeout[[:blank:]]*=[[:blank:]]*0" "$file" && \'
+  println "$file" '     ! grep -q "^Defaults:$(logname)[[:blank:]]\+timestamp_timeout[[:blank:]]*=[[:blank:]]*" "$file"; then'
+  println "$file" '    echo "## strap:begin" >> "$file"'
+  println "$file" '    echo "Defaults:$(logname) timestamp_timeout=1" >> "$file"'
+  println "$file" '    echo "## strap:end" >> "$file"'
+  println "$file" '  fi'
+  println "$file" 'fi'
+  chmod 700 "$file"
+
+}
+
+mkvisudocleanup() {
+  local dir="$HOME/.strap/.visudo"
+  mkdir -p "$dir"
+  chmod go-rwx "$dir"
+  local file="$dir/cleanup"
+  rm -rf "$file"
+  touch "$file"
+  println "$file" '#!/bin/sh'
+  println "$file" 'if [ -z "$1" ]; then'
+  println "$file" '  EDITOR="$0" sudo -E visudo -q >/dev/null 2>&1'
+  println "$file" 'else'
+  println "$file" '  file="$1"'
+  println "$file" '  # If strap set something, remove it:'
+  println "$file" "  if grep -q '^## strap:begin$' \"\$file\" && grep -q '^## strap:end$' \"\$file\"; then"
+  println "$file" "    sed -i '' '/## strap:begin/,/## strap:end/d' \"\$file\""
+  println "$file" '  fi'
+  println "$file" '  # remove any blank lines at end of the file:'
+  println "$file" "  sed -i '' -e :a -e '/^\n*$/{\$d;N;};/\n\$/ba' \"\$file\""
+  println "$file" 'fi'
+  chmod 700 "$file"
+}
+
 # allow subshells to call these functions:
 export -f abort
 export -f log
 export -f logn
 export -f logk
 export -f readval
+export -f println
 
 export _STRAP_MACOSX_VERSION="$(sw_vers -productVersion)"
 echo "$_STRAP_MACOSX_VERSION" | grep $Q -E "^10.(9|10|11|12|13)" || { abort "Run Strap on Mac OS X 10.9/10/11/12/13."; }
@@ -163,10 +214,15 @@ echo "$_STRAP_MACOSX_VERSION" | grep $Q -E "^10.(9|10|11|12|13)" || { abort "Run
 [ "$USER" = "root" ] && abort "Run Strap as yourself, not root."
 groups | grep $Q admin || abort "Add $USER to the admin group."
 
+export _STRAP_USER_DIR="$HOME/.strap"
+mkdir -p "$_STRAP_USER_DIR"
+mkvisudocheck
+mkvisudocleanup
+
 # Initialise sudo now to save prompting later.
 log "Enter your password (for sudo access):"
 sudo -k
-sudo /usr/bin/true
+"$_STRAP_USER_DIR/.visudo/check"
 [ -f "$STRAP_FULL_PATH" ]
 sudo bash "$STRAP_FULL_PATH" --sudo-wait &
 STRAP_SUDO_WAIT_PID="$!"
@@ -266,17 +322,10 @@ logk
 # Shell RC File assertions:
 #############################################################
 
-export _STRAP_USER_DIR="$HOME/.strap"
-mkdir -p "$_STRAP_USER_DIR"
 
 export STRAP_SHELL=$(basename $SHELL)
 export STRAPRC_FILE="$HOME/.strap/straprc"
 export STRAPRC_PRETTY_NAME="\$HOME/.strap/straprc"
-
-println() {
-  echo "$2" >> "$1"
-}
-export -f println
 
 straprc_println() {
   println "$STRAPRC_FILE" "$1"
