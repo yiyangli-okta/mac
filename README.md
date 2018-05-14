@@ -1,6 +1,6 @@
 # Strap
 
-Ensures that a new or existing Mac has necessary development software.
+Ensures that a new or existing Mac has the necessary tools for developing software at Okta.
 
 To run it:
 
