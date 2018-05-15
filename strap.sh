@@ -140,18 +140,18 @@ readval() {
 
   while [ -z "$first" ] || [ -z "$second" ] || [ "$first" != "$second" ]; do
       if [ "$secure" = true ]; then
-        read -r -s -p "$prompt: " first <$(tty)
+        read -r -s -p "$prompt: " first </dev/tty
         printf "\n"
       else
-        read -r -p "$prompt: " first <$(tty)
+        read -r -p "$prompt: " first </dev/tty
       fi
 
       if [ "$confirm" = true ]; then
           if [ "$secure" = true ]; then
-            read -r -s -p "$prompt (again): " second <$(tty)
+            read -r -s -p "$prompt (again): " second </dev/tty
             printf "\n"
           else
-            read -r -p "$prompt (again): " second <$(tty)
+            read -r -p "$prompt (again): " second </dev/tty
           fi
       else
         # if we don't need confirmation, simulate a second entry to stop the loop:
