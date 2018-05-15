@@ -557,9 +557,9 @@ else
   _request_body="{\"scopes\":[\"repo\",\"admin:org\",\"admin:public_key\",\"admin:repo_hook\",\"admin:org_hook\",\"gist\",\"notifications\",\"user\",\"delete_repo\",\"admin:gpg_key\"],\"note\":\"Okta Strap-generated token, created at $_STRAP_UTC_DATE\"}"
   _creds="$STRAP_GITHUB_USER:$STRAP_GITHUB_PASSWORD"
   _response=$(curl --silent --show-error -i -u "$_creds" -H "Content-Type: application/json" -X POST -d "$_request_body" https://api.github.com/authorizations)
-  _status=$(echo "$_response" | grep 'HTTP/1.1' | awk '{print $2}')
+  _status=$(echo "$_response" | grep 'HTTP/1.1' | awk '{print $2}') && [ -z "$_status" ] && abort "Unable to parse GitHub response status.  GitHub response format is likely to have changed.  Please report this to the Strap developers."
   _otp_type=$(echo "$_response" | grep 'X-GitHub-OTP:' | awk '{print $3}')
-  _response_body=$(echo "$_response" | sed '1,/^\r\{0,1\}$/d')
+  _response_body=$(echo "$_response" | sed '1,/^\r\{0,1\}$/d') && [ -z "$_response_body" ] && abort "Unable to parse GitHub response body.  GitHub response format is likely to have changed.  Please report this to the Strap developers."
 
   if [ ! -z "$_otp_type" ]; then #2factor required - ask for code:
     _strap_github_otp=
@@ -570,6 +570,7 @@ else
     #_status=$(echo "$_response" | grep 'HTTP/1.1' | awk '{print $2}')
     #_otp_type=$(echo "$_response" | grep 'X-GitHub-OTP:' | awk '{print $3}')
     #_response_body=$(echo "$_response" | sed '1,/^\r\{0,1\}$/d')
+    [ -z "$_response_body" ] && abort "Unable to parse GitHub OTP-authorized response body.  GitHub response format is likely to have changed.  Please report this to the Strap developers."
   fi
 
   export _STRAP_GITHUB_API_TOKEN=$(echo "$_response_body" | jq -er '.token')
@@ -577,7 +578,7 @@ else
   _store_github_token=true
 
   if [ -z "$_STRAP_GITHUB_API_TOKEN" ] || [ "$_STRAP_GITHUB_API_TOKEN" == "null" ]; then
-      abort 'Unable to create GitHub API personal access token'
+      abort 'Unable to create GitHub API personal access token.  GitHub response format is likely to have changed.'
   fi
 fi
 if [ $_store_github_token = true ]; then
