@@ -135,20 +135,23 @@ readval() {
   local first=""
   local second=""
 
+  # all the read commands below direct input from <$(tty). See:
+  # https://stackoverflow.com/questions/38484078/why-does-the-bash-read-command-return-without-any-input?rq=1
+
   while [ -z "$first" ] || [ -z "$second" ] || [ "$first" != "$second" ]; do
       if [ "$secure" = true ]; then
-        read -r -s -p "$prompt: " first </dev/tty
+        read -r -s -p "$prompt: " first <$(tty)
         printf "\n"
       else
-        read -r -p "$prompt: " first </dev/tty
+        read -r -p "$prompt: " first <$(tty)
       fi
 
       if [ "$confirm" = true ]; then
           if [ "$secure" = true ]; then
-            read -r -s -p "$prompt (again): " second </dev/tty
+            read -r -s -p "$prompt (again): " second <$(tty)
             printf "\n"
           else
-            read -r -p "$prompt (again): " second </dev/tty
+            read -r -p "$prompt (again): " second <$(tty)
           fi
       else
         # if we don't need confirmation, simulate a second entry to stop the loop:
