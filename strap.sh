@@ -559,22 +559,23 @@ else
   _response=$(curl --silent --show-error -i -u "$_creds" -H "Content-Type: application/json" -X POST -d "$_request_body" https://api.github.com/authorizations)
   _status=$(echo "$_response" | grep 'HTTP/1.1' | awk '{print $2}') && [ -z "$_status" ] && abort "Unable to parse GitHub response status.  GitHub response format is likely to have changed.  Please report this to the Strap developers."
   _otp_type=$(echo "$_response" | grep 'X-GitHub-OTP:' | awk '{print $3}')
-  _response_body=$(echo "$_response" | sed '1,/^\r\{0,1\}$/d') && [ -z "$_otp_type" ] && [ -z "$_response_body" ] && abort "Unable to parse GitHub response body.  GitHub response format is likely to have changed.  Please report this to the Strap developers."
 
   if [ ! -z "$_otp_type" ]; then #2factor required - ask for code:
     _strap_github_otp=
     readval _strap_github_otp "Enter GitHub two-factor code"
 
     #try again, this time with the OTP code
-    _response_body=$(curl --silent --show-error -u "$_creds" -H "X-GitHub-OTP: $_strap_github_otp" -H "Content-Type: application/json" -X POST -d "$_request_body" https://api.github.com/authorizations)
-    #_status=$(echo "$_response" | grep 'HTTP/1.1' | awk '{print $2}')
-    #_otp_type=$(echo "$_response" | grep 'X-GitHub-OTP:' | awk '{print $3}')
-    #_response_body=$(echo "$_response" | sed '1,/^\r\{0,1\}$/d')
-    [ -z "$_response_body" ] && abort "Unable to parse GitHub OTP-authorized response body.  GitHub response format is likely to have changed.  Please report this to the Strap developers."
+    _response=$(curl --silent --show-error -u "$_creds" -H "X-GitHub-OTP: $_strap_github_otp" -H "Content-Type: application/json" -X POST -d "$_request_body" https://api.github.com/authorizations)
   fi
 
-  export _STRAP_GITHUB_API_TOKEN=$(echo "$_response_body" | jq -er '.token')
-  _STRAP_GITHUB_TOKEN_COMMENT=$(echo "$_response_body" | jq -er '.url') # use the token url as the comment in this case
+  _token=$(echo "$_response" | grep '^  "token": ' | sed 's/,//' | sed 's/"//g' | awk '{print $2}')
+  [ -z "$_token" ] && abort "Unable to parse GitHub response body.  GitHub response format is likely to have changed.  Please report this to the Strap developers."
+
+  _tokenUrl=$(echo "$_response" | grep '^  "url": ' | sed 's/,//' | sed 's/"//g' | awk '{print $2}')
+  [ -z "$_tokenUrl" ] && abort "Unable to parse GitHub response body.  GitHub response format is likely to have changed.  Please report this to the Strap developers."
+
+  export _STRAP_GITHUB_API_TOKEN="$_token"
+  _STRAP_GITHUB_TOKEN_COMMENT="$_tokenUrl" # use the token url as the comment in this case
   _store_github_token=true
 
   if [ -z "$_STRAP_GITHUB_API_TOKEN" ] || [ "$_STRAP_GITHUB_API_TOKEN" == "null" ]; then
