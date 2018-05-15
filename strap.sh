@@ -559,7 +559,7 @@ else
   _response=$(curl --silent --show-error -i -u "$_creds" -H "Content-Type: application/json" -X POST -d "$_request_body" https://api.github.com/authorizations)
   _status=$(echo "$_response" | grep 'HTTP/1.1' | awk '{print $2}') && [ -z "$_status" ] && abort "Unable to parse GitHub response status.  GitHub response format is likely to have changed.  Please report this to the Strap developers."
   _otp_type=$(echo "$_response" | grep 'X-GitHub-OTP:' | awk '{print $3}')
-  _response_body=$(echo "$_response" | sed '1,/^\r\{0,1\}$/d') && [ -z "$_response_body" ] && abort "Unable to parse GitHub response body.  GitHub response format is likely to have changed.  Please report this to the Strap developers."
+  _response_body=$(echo "$_response" | sed '1,/^\r\{0,1\}$/d') && [ -z "$_otp_type" ] && [ -z "$_response_body" ] && abort "Unable to parse GitHub response body.  GitHub response format is likely to have changed.  Please report this to the Strap developers."
 
   if [ ! -z "$_otp_type" ]; then #2factor required - ask for code:
     _strap_github_otp=
