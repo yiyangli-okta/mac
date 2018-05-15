@@ -132,16 +132,24 @@ readval() {
   local prompt="$2" && [ -z "$prompt" ] && prompt="Enter value" #default value
   local secure=$3
   local confirm=$4 && [ -z "$confirm" ] && [ "$secure" = true ] && confirm=true
-  local first
-  local second
+  local first=""
+  local second=""
 
   while [ -z "$first" ] || [ -z "$second" ] || [ "$first" != "$second" ]; do
-      printf "$prompt: "
-      if [ "$secure" = true ]; then read -s first; printf "\n"; else read first; fi
+      if [ "$secure" = true ]; then
+        read -s -p "$prompt: " first
+        printf "\n"
+      else
+        read -p "$prompt: " first
+      fi
 
       if [ "$confirm" = true ]; then
-          printf "$prompt (again): "
-          if [ "$secure" = true ]; then read -s second; printf "\n"; else read second; fi
+          if [ "$secure" = true ]; then
+            read -s -p "$prompt (again): " second
+            printf "\n"
+          else
+            read -p "$prompt (again): " second
+          fi
       else
         # if we don't need confirmation, simulate a second entry to stop the loop:
         [ "$confirm" != true ] && second="$first"
