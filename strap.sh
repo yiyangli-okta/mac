@@ -559,7 +559,7 @@ else
   _status=$(echo "$_response" | grep 'HTTP/1.1' | awk '{print $2}') && [ -z "$_status" ] && abort "Unable to parse GitHub response status.  GitHub response format is likely to have changed.  Please report this to the Strap developers."
   _otp_type=$(echo "$_response" | grep 'X-GitHub-OTP:' | awk '{print $3}')
 
-  if [ ! -z "$_otp_type" ]; then #2factor required - ask for code:
+  if [ ! -z "$_otp_type" ]; then # two-factor required - ask for code:
     _strap_github_otp=
     readval _strap_github_otp "Enter GitHub two-factor code"
 
@@ -568,17 +568,17 @@ else
   fi
 
   _token=$(echo "$_response" | grep '^  "token": ' | sed 's/,//' | sed 's/"//g' | awk '{print $2}')
-  [ -z "$_token" ] && abort "Unable to parse GitHub response body.  GitHub response format is likely to have changed.  Please report this to the Strap developers."
+  [ -z "$_token" ] && abort "Unable to parse GitHub response API Token.  GitHub response format may have changed.  Please report this to the Strap developers.  GitHub HTTP response: $_response"
 
   _tokenUrl=$(echo "$_response" | grep '^  "url": ' | sed 's/,//' | sed 's/"//g' | awk '{print $2}')
-  [ -z "$_tokenUrl" ] && abort "Unable to parse GitHub response body.  GitHub response format is likely to have changed.  Please report this to the Strap developers."
+  [ -z "$_tokenUrl" ] && abort "Unable to parse GitHub response API Token URL.  GitHub response format may have changed.  Please report this to the Strap developers.  GitHub HTTP response: $_response"
 
   export _STRAP_GITHUB_API_TOKEN="$_token"
   _STRAP_GITHUB_TOKEN_COMMENT="$_tokenUrl" # use the token url as the comment in this case
   _store_github_token=true
 
   if [ -z "$_STRAP_GITHUB_API_TOKEN" ] || [ "$_STRAP_GITHUB_API_TOKEN" == "null" ]; then
-      abort 'Unable to create GitHub API personal access token.  GitHub response format is likely to have changed.'
+    abort 'Unable to create GitHub API personal access token.  GitHub response format is likely to have changed.'
   fi
 fi
 if [ $_store_github_token = true ]; then
