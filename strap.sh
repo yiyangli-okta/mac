@@ -527,6 +527,15 @@ ensure_brew "jq"
 ensure_brew "git"
 
 logn "Checking git config:"
+
+# https://github.com/les-okta/mac/issues/11
+[ -f "$HOME/.gitconfig" ] || touch "$HOME/.gitconfig"
+chmod 700 "$HOME/.gitconfig"
+
+if ! git config --global core.autocrlf >/dev/null; then
+  git config --global core.autocrlf input
+fi
+
 if git config --global github.user >/dev/null; then
   STRAP_GITHUB_USER="$(git config --global github.user)"
 else
