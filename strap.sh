@@ -173,19 +173,25 @@ mkvisudocheck() {
   chmod go-rwx "$dir"
   local file="$dir/check"
   rm -rf "$file"
-  println "$file" '#!/bin/sh'
-  println "$file" 'if [ -z "$1" ]; then'
-  println "$file" '  EDITOR="$0" sudo -E visudo -q >/dev/null 2>&1'
-  println "$file" 'else'
-  println "$file" '  file="$1"'
-  println "$file" '  if ! grep -q "^Defaults:$(logname)[[:blank:]]\+timestamp_timeout[[:blank:]]*=[[:blank:]]*" "$file"; then'
-  println "$file" '    echo "## strap:begin" >> "$file"'
-  println "$file" '    echo "Defaults:$(logname) timestamp_timeout=1" >> "$file"'
-  println "$file" '    echo "## strap:end" >> "$file"'
-  println "$file" '  fi'
-  println "$file" 'fi'
+  touch "$file"
+  cat << 'EOF' > "$file"
+#!/bin/sh
+if [ -z "$1" ]; then
+  EDITOR="$0" sudo -E visudo -q >/dev/null 2>&1
+else
+  file="$1"
+  # Only need to set a user-specific timeout if there is a global timeout set to zero:
+  if grep -q "^Defaults[[:blank:]]\+timestamp_timeout[[:blank:]]*=[[:blank:]]*0" "$file"; then
+    # Only set a user-specific timeout if not already set:
+    if ! grep -q "^Defaults:$(logname)[[:blank:]]\+timestamp_timeout[[:blank:]]*=[[:blank:]]*" "$file"; then
+      echo "## strap:begin" >> "$file"
+      echo "Defaults:$(logname) timestamp_timeout=1" >> "$file"
+      echo "## strap:end" >> "$file"
+    fi
+  fi
+fi
+EOF
   chmod 700 "$file"
-
 }
 
 mkvisudocleanup() {
@@ -195,18 +201,20 @@ mkvisudocleanup() {
   local file="$dir/cleanup"
   rm -rf "$file"
   touch "$file"
-  println "$file" '#!/bin/sh'
-  println "$file" 'if [ -z "$1" ]; then'
-  println "$file" '  EDITOR="$0" sudo -E visudo -q >/dev/null 2>&1'
-  println "$file" 'else'
-  println "$file" '  file="$1"'
-  println "$file" '  # If strap set something, remove it:'
-  println "$file" "  if grep -q '^## strap:begin$' \"\$file\" && grep -q '^## strap:end$' \"\$file\"; then"
-  println "$file" "    sed -i '' '/## strap:begin/,/## strap:end/d' \"\$file\""
-  println "$file" '  fi'
-  println "$file" '  # remove any blank lines at end of the file:'
-  println "$file" "  sed -i '' -e :a -e '/^\n*$/{\$d;N;};/\n\$/ba' \"\$file\""
-  println "$file" 'fi'
+  cat << 'EOF' > "$file"
+#!/bin/sh
+if [ -z "$1" ]; then
+  EDITOR="$0" sudo -E visudo -q >/dev/null 2>&1
+else
+  file="$1"
+  # If strap set something, remove it:
+  if grep -q '^## strap:begin$' "$file" && grep -q '^## strap:end$' "$file"; then
+    sed -i '' '/## strap:begin/,/## strap:end/d' "$file"
+  fi
+  # remove any blank lines at end of the file:
+  sed -i '' -e :a -e '/^\n*$/{\$d;N;};/\n\$/ba' "$file"
+fi
+EOF
   chmod 700 "$file"
 }
 
