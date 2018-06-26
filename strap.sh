@@ -674,34 +674,34 @@ export -f githubdl
 export -f ensure_strap_file
 
 # https://github.com/les-okta/mac/issues/12
-logn "Checking GitHub private repo read access:"
+#logn "Checking GitHub private repo read access:"
 # ensure they can access private strap files as necessary:
-status=$(curl -u "$STRAP_GITHUB_USER:$_STRAP_GITHUB_API_TOKEN" -sw '%{http_code}' "https://api.github.com/repos/okta/strap/collaborators/$STRAP_GITHUB_USER")
-if [ "$status" != "204" ]; then
-  echo
-  echo
-  echo 'ERROR:'
-  echo
-  echo "The $STRAP_GITHUB_USER GitHub user account does not currently have permission to read the"
-  echo 'okta/strap private repository. Strap requires this to finish configuring your machine.'
-  echo
-  echo 'Send an email to itson@okta.com and CC your hiring manager with the following request:'
-  echo
-  echo '    Hello,'
-  echo
-  echo '    I am a software engineer and I need "Engineering-Push" privileges for Okta GitHub repositories '
-  echo '    as indicated here: https://oktawiki.atlassian.net/wiki/spaces/IT/pages/27558003/GitHub+Access'
-  echo
-  echo '    Could you please enable these privileges for me?'
-  echo
-  echo '    Thank you!'
-  echo
-  echo 'After you have been granted permissions, you may run strap again.'
-  echo
-  echo
-  exit 1
-fi
-logk
+#status=$(curl -u "$STRAP_GITHUB_USER:$_STRAP_GITHUB_API_TOKEN" -sw '%{http_code}' "https://api.github.com/repos/okta/strap/collaborators/$STRAP_GITHUB_USER")
+#if [ "$status" != "204" ]; then
+#  echo
+#  echo
+#  echo 'ERROR:'
+#  echo
+#  echo "The $STRAP_GITHUB_USER GitHub user account does not currently have permission to read the"
+#  echo 'okta/strap private repository. Strap requires this to finish configuring your machine.'
+#  echo
+#  echo 'Send an email to itson@okta.com and CC your hiring manager with the following request:'
+#  echo
+#  echo '    Hello,'
+#  echo
+#  echo '    I am a software engineer and I need "Engineering-Push" privileges for Okta GitHub repositories '
+#  echo '    as indicated here: https://oktawiki.atlassian.net/wiki/spaces/IT/pages/27558003/GitHub+Access'
+#  echo
+#  echo '    Could you please enable these privileges for me?'
+#  echo
+#  echo '    Thank you!'
+#  echo
+#  echo 'After you have been granted permissions, you may run strap again.'
+#  echo
+#  echo
+#  exit 1
+#fi
+#logk
 
 _dstdir="$HOME/.strap/okta"
 mkdir -p "$_dstdir"
