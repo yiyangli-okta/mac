@@ -74,13 +74,52 @@ fi
 STDIN_FILE_DESCRIPTOR="0"
 [ -t "$STDIN_FILE_DESCRIPTOR" ] && STRAP_INTERACTIVE="1"
 
+strap::fs::readlink() {
+  $(type -p greadlink readlink | head -1) "$1" # prefer greadlink if it exists
+}
+
+strap::fs::dirpath() {
+  [[ -z "$1" ]] && echo "strap::fs::dirpath: a directory argument is required." >&2 && return 1
+  [[ ! -d "$1" ]] && echo "strap::fs::dirpath: argument is not a directory: $1" >&2 && return 1
+  echo "$(cd -P "$1" && pwd)"
+}
+
+strap::fs::filepath() {
+  [[ -d "$1" ]] && echo "strap::fs::filepath: directory arguments are not permitted" >&2 && return 1
+  local dirname="$(dirname "$1")"
+  local filename="$(basename "$1")"
+  local canonical_dir="$(strap::fs::dirpath "$dirname")"
+  echo "$canonical_dir/$filename"
+}
+
+##
+# Returns the canonical filesystem path of the specified argument
+# Argument must be a directory or a file
+##
+strap::fs::path() {
+  local target="$1"
+  local dir
+  if [[ -d "$target" ]]; then # target is a directory, get its canonical path:
+    target="$(strap::fs::dirpath "$target")"
+  else
+    while [[ -h "$target" ]]; do # target is a symlink, so resolve it
+      target="$(strap::fs::readlink "$target")"
+      if [[ "$target" != /* ]]; then # target doesn't start with '/', so it's not yet absolute.  Fix that:
+        target="$(strap::fs::filepath "$target")"
+      fi
+    done
+    target="$(strap::fs::filepath "$target")"
+  fi
+  echo "$target"
+}
+
 STRAP_GIT_NAME="$(id -F)"
 STRAP_GIT_EMAIL=
 STRAP_GITHUB_USER=
 STRAP_GITHUB_TOKEN=
 STRAP_ISSUES_URL="https://github.com/les-okta/mac/issues/new"
 
-STRAP_FULL_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+STRAP_FULL_PATH="$(strap::fs::path "${BASH_SOURCE[0]}")"
 
 abort() { STRAP_STEP="";   echo "!!! $*" >&2; exit 1; }
 log()   { STRAP_STEP="$*"; echo "--> $*"; }
