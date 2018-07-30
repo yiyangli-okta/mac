@@ -44,7 +44,7 @@ cleanup() {
   if [ -n "$STRAP_SUDO_WAIT_PID" ]; then
     sudo kill "$STRAP_SUDO_WAIT_PID"
   fi
-  [ -x "$HOME/.strap/.visudo/cleanup" ] && "$HOME/.strap/.visudo/cleanup"
+  #[ -x "$HOME/.strap/.visudo/cleanup" ] && "$HOME/.strap/.visudo/cleanup"
   rm -rf "$HOME/.strap/.visudo"
   sudo -k
   rm -f "$CLT_PLACEHOLDER"
@@ -279,7 +279,8 @@ mkvisudocleanup
 # Initialise sudo now to save prompting later.
 log "Enter your password (for sudo access):"
 sudo -k
-"$_STRAP_USER_DIR/.visudo/check"
+#"$_STRAP_USER_DIR/.visudo/check"
+sudo /usr/bin/true
 [ -f "$STRAP_FULL_PATH" ]
 sudo bash "$STRAP_FULL_PATH" --sudo-wait &
 STRAP_SUDO_WAIT_PID="$!"
